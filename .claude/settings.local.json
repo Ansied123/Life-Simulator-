@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(curl -sf http://localhost:5173)",
+      "Bash(break)",
+      "Read(//private/tmp/**)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-andyxu-Desktop-Life-Simulator-lifesim/b9b414c1-a475-4412-8bf4-c4a87907d64e/scratchpad/pw-check)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(npx playwright *)",
+      "Bash(node check.js)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(npx tsc *)",
+      "Bash(npx oxlint *)",
+      "Bash(node check-admin.js)",
+      "Bash(node check-death.js)",
+      "Bash(node check-create.js)",
+      "Bash(node check-family.js)",
+      "Bash(node check-decay-death.js)",
+      "Bash(node check-decay-death2.js)",
+      "Bash(node check-age-gate.js)",
+      "Bash(node check-new-family-events.js)",
+      "Bash(node check-exit-end.js)"
+    ]
+  }
+}
