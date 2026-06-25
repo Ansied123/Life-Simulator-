@@ -68,7 +68,17 @@ body {
 }
 /* The game screen isn't vertically centered like the menu/create screens, so its
    content sits right under the fixed top-right Sign In + Admin button stack. */
-.app:not(.start-screen) { padding-top: 76px; }
+.app:not(.start-screen) { padding-top: 76px; max-width: 900px; }
+
+/* ===== Game screen: two-column layout ===== */
+.game-columns { display: flex; gap: 20px; align-items: flex-start; }
+.game-col-left { flex: 0 0 300px; min-width: 0; }
+.game-col-right { flex: 1; min-width: 0; }
+
+@media (max-width: 720px) {
+  .game-columns { flex-direction: column; }
+  .game-col-left { flex: 1 1 auto; width: 100%; }
+}
 
 /* ===== Start screen ===== */
 .start-screen {
@@ -206,15 +216,12 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
   margin-bottom: 6px;
 }
 .char-id {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   border-bottom: 1px dashed var(--line);
   padding-bottom: 10px;
   margin-bottom: 10px;
 }
-.char-name-row { display: flex; align-items: baseline; gap: 10px; }
-.char-name { font-size: 1.5rem; font-weight: 700; }
+.char-name { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+.char-id-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .char-details-btn { font-size: 0.75rem; padding: 0; }
 .char-meta { color: var(--ink-soft); letter-spacing: 1px; white-space: nowrap; }
 .char-figures { display: flex; gap: 28px; }

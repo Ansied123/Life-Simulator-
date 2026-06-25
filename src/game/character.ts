@@ -50,6 +50,7 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
     lastName: last,
     gender,
     age: 0,
+    month: 0,
     alive: true,
     money: 0,
     job: null,

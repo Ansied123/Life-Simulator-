@@ -14,6 +14,9 @@ export interface Character {
   lastName: string;
   gender: 'male' | 'female';
   age: number;
+  // Months since the last birthday (0-11). Only relevant once monthly mode
+  // kicks in at MONTHLY_MODE_MIN_AGE; resets to 0 every time age increments.
+  month: number;
   alive: boolean;
   causeOfDeath?: string;
   money: number;

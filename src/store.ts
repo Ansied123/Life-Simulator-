@@ -6,6 +6,7 @@ import { naturalAging, rollDeath, ageRelatives } from './game/engine';
 import { rollAdditionalSiblings } from './game/family';
 import { pickEvent } from './game/events';
 import { DRIVERS_LICENSE_EVENT } from './game/events/drivers';
+import { MONTHS_PER_YEAR } from './game/calendar';
 import type { ShopItem } from './game/shop';
 import { saveGame, loadGame, clearSave, getLivesLived, incrementLivesLived } from './game/save';
 
@@ -17,6 +18,36 @@ interface GameState {
   pendingEvent: GameEvent | null;
   // Flavor text shown after a choice is made.
   lastResult: string | null;
+}
+
+// Shared by ageUp (ages 0-4) and nextMonth's year-wrap (age 5+): ages the
+// character a full year, ticks relatives, rolls death, and picks an event.
+function advanceYear(c: Character, firedOnce: Set<string>): { character: Character; pendingEvent: GameEvent | null } {
+  let updated: Character = { ...c, age: c.age + 1, month: 0 };
+  updated = naturalAging(updated);
+  updated = ageRelatives(updated);
+  updated = rollAdditionalSiblings(updated);
+
+  const cause = rollDeath(updated);
+  if (cause) {
+    return {
+      character: {
+        ...updated,
+        alive: false,
+        causeOfDeath: cause,
+        log: [...updated.log, { age: updated.age, text: `Died of ${cause} at age ${updated.age}.` }],
+      },
+      pendingEvent: null,
+    };
+  }
+
+  // The driver's license offer is a once-in-a-lifetime, age-16-only check:
+  // 70% of the time it's guaranteed to show that year, 30% it never appears.
+  if (updated.age === 16 && Math.random() < LICENSE_OFFER_CHANCE) {
+    return { character: updated, pendingEvent: DRIVERS_LICENSE_EVENT };
+  }
+
+  return { character: updated, pendingEvent: pickEvent(updated, firedOnce) };
 }
 
 export function useGame() {
@@ -60,39 +91,26 @@ export function useGame() {
     setState({ character: null, pendingEvent: null, lastResult: null });
   }, []);
 
-  // Advance one year: age, drift stats, check death, maybe fire an event.
+  // Advance one full year (ages 0-4, before monthly mode kicks in).
   const ageUp = useCallback(() => {
     setState((prev) => {
       if (!prev.character || !prev.character.alive) return prev;
+      const { character, pendingEvent } = advanceYear(prev.character, firedOnce);
+      return { character, pendingEvent, lastResult: null };
+    });
+  }, [firedOnce]);
 
-      let c: Character = { ...prev.character, age: prev.character.age + 1 };
-      c = naturalAging(c);
-      c = ageRelatives(c);
-      c = rollAdditionalSiblings(c);
-
-      // Death check happens before events — no events after death.
-      const cause = rollDeath(c);
-      if (cause) {
-        c = {
-          ...c,
-          alive: false,
-          causeOfDeath: cause,
-          log: [...c.log, { age: c.age, text: `Died of ${cause} at age ${c.age}.` }],
-        };
-        return { character: c, pendingEvent: null, lastResult: null };
+  // Advance one month (age 5+). Wraps into a full advanceYear once 12
+  // months have passed since the last birthday.
+  const nextMonth = useCallback(() => {
+    setState((prev) => {
+      if (!prev.character || !prev.character.alive) return prev;
+      const c = prev.character;
+      if (c.month + 1 >= MONTHS_PER_YEAR) {
+        const { character, pendingEvent } = advanceYear(c, firedOnce);
+        return { character, pendingEvent, lastResult: null };
       }
-
-      // The driver's license offer is a once-in-a-lifetime, age-16-only check:
-      // 70% of the time it's guaranteed to show that year, 30% it never appears.
-      if (c.age === 16) {
-        if (Math.random() < LICENSE_OFFER_CHANCE) {
-          return { character: c, pendingEvent: DRIVERS_LICENSE_EVENT, lastResult: null };
-        }
-        return { character: c, pendingEvent: pickEvent(c, firedOnce), lastResult: null };
-      }
-
-      const event = pickEvent(c, firedOnce);
-      return { character: c, pendingEvent: event, lastResult: null };
+      return { character: { ...c, month: c.month + 1 }, pendingEvent: null, lastResult: null };
     });
   }, [firedOnce]);
 
@@ -258,6 +276,7 @@ export function useGame() {
     startNewLife,
     deleteCharacter,
     ageUp,
+    nextMonth,
     chooseOption,
     interactWithRelative,
     resolveLicenseTest,

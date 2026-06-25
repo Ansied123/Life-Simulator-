@@ -12,12 +12,13 @@ import { LicenseQuiz } from './components/LicenseQuiz';
 import type { StatKey } from './game/types';
 import { randomGender, randomFirstName, randomLastName } from './game/character';
 import { DRIVERS_LICENSE_EVENT_ID, TAKE_TEST_CHOICE_TEXT } from './game/events/drivers';
+import { MONTHLY_MODE_MIN_AGE } from './game/calendar';
 import './App.css';
 
 const STAT_ORDER: StatKey[] = ['health', 'happiness', 'smarts', 'looks'];
 const SUFFIX_OPTIONS = ['', 'Jr.', 'Sr.', 'I', 'II', 'III', 'IV', 'V'];
 const TEXT_SIZES = ['small', 'medium', 'large'] as const;
-const APP_VERSION = 'v1.2';
+const APP_VERSION = 'v1.3';
 const SHOP_MIN_AGE = 12;
 
 type Theme = 'light' | 'dark';
@@ -64,6 +65,7 @@ export default function App() {
     startNewLife,
     deleteCharacter,
     ageUp,
+    nextMonth,
     chooseOption,
     interactWithRelative,
     resolveLicenseTest,
@@ -552,19 +554,6 @@ export default function App() {
           </div>
         )}
 
-        <CharacterHeader character={character} onViewDetails={() => setShowBirthCertificate(true)} />
-
-        <div className="feature-row">
-          <button className="feature-btn" onClick={() => setShowInventory(true)}>
-            <span className="feature-icon">🎒</span> Inventory
-          </button>
-          {character.age >= SHOP_MIN_AGE && (
-            <button className="feature-btn" onClick={() => setShowShop(true)}>
-              <span className="feature-icon">🛍️</span> Shop
-            </button>
-          )}
-        </div>
-
         {showInventory && (
           <div className="settings-overlay" onClick={() => setShowInventory(false)}>
             <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
@@ -607,72 +596,91 @@ export default function App() {
           </div>
         )}
 
-        <div className="stats-grid">
-          {STAT_ORDER.map((s) => (
-            <StatBar key={s} stat={s} value={character.stats[s]} />
-          ))}
-        </div>
+        <div className="game-columns">
+          <div className="game-col-left">
+            <CharacterHeader character={character} onViewDetails={() => setShowBirthCertificate(true)} />
 
-        <div className="stage">
-          {showLicenseQuiz ? (
-            <div className="event-card">
-              <div className="event-stamp">DMV</div>
-              <LicenseQuiz
-                onComplete={(score, passed) => {
-                  resolveLicenseTest(score, passed);
-                  setShowLicenseQuiz(false);
-                }}
-              />
-            </div>
-          ) : pendingEvent ? (
-            <EventCard
-              event={pendingEvent}
-              character={character}
-              onChoose={(choice) => {
-                if (pendingEvent.id === DRIVERS_LICENSE_EVENT_ID && choice.text === TAKE_TEST_CHOICE_TEXT) {
-                  setShowLicenseQuiz(true);
-                  return;
-                }
-                chooseOption(choice);
-              }}
-            />
-          ) : (
-            <>
-              <div className="tab-bar">
-                <button className={`tab-btn ${view === 'log' ? 'active' : ''}`} onClick={() => setView('log')}>
-                  Life Record
+            <div className="feature-row">
+              <button className="feature-btn" onClick={() => setShowInventory(true)}>
+                <span className="feature-icon">🎒</span> Inventory
+              </button>
+              {character.age >= SHOP_MIN_AGE && (
+                <button className="feature-btn" onClick={() => setShowShop(true)}>
+                  <span className="feature-icon">🛍️</span> Shop
                 </button>
-                <button
-                  className={`tab-btn ${view === 'family' ? 'active' : ''}`}
-                  onClick={() => setView('family')}
-                >
-                  Family ({character.relatives.filter((r) => r.alive).length})
-                </button>
-              </div>
-
-              {view === 'log' ? (
-                <div className="log-panel">
-                  <div className="log-header">Life Record</div>
-                  <div className="log-scroll">
-                    {character.log.map((entry, i) => (
-                      <div key={i} className="log-entry">
-                        <span className="log-age">{entry.age}</span>
-                        <span className="log-text">{entry.text}</span>
-                      </div>
-                    ))}
-                    {lastResult && <div className="log-result">{lastResult}</div>}
-                    <div ref={logEndRef} />
-                  </div>
-                </div>
-              ) : (
-                <FamilyPanel
-                  relatives={character.relatives}
-                  money={character.money}
-                  onInteract={interactWithRelative}
-                />
               )}
-            </>
-          )}
+            </div>
+
+            <div className="stats-grid">
+              {STAT_ORDER.map((s) => (
+                <StatBar key={s} stat={s} value={character.stats[s]} />
+              ))}
+            </div>
+          </div>
+
+          <div className="game-col-right">
+            <div className="stage">
+              {showLicenseQuiz ? (
+                <div className="event-card">
+                  <div className="event-stamp">DMV</div>
+                  <LicenseQuiz
+                    onComplete={(score, passed) => {
+                      resolveLicenseTest(score, passed);
+                      setShowLicenseQuiz(false);
+                    }}
+                  />
+                </div>
+              ) : pendingEvent ? (
+                <EventCard
+                  event={pendingEvent}
+                  character={character}
+                  onChoose={(choice) => {
+                    if (pendingEvent.id === DRIVERS_LICENSE_EVENT_ID && choice.text === TAKE_TEST_CHOICE_TEXT) {
+                      setShowLicenseQuiz(true);
+                      return;
+                    }
+                    chooseOption(choice);
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="tab-bar">
+                    <button className={`tab-btn ${view === 'log' ? 'active' : ''}`} onClick={() => setView('log')}>
+                      Life Record
+                    </button>
+                    <button
+                      className={`tab-btn ${view === 'family' ? 'active' : ''}`}
+                      onClick={() => setView('family')}
+                    >
+                      Family ({character.relatives.filter((r) => r.alive).length})
+                    </button>
+                  </div>
+
+                  {view === 'log' ? (
+                    <div className="log-panel">
+                      <div className="log-header">Life Record</div>
+                      <div className="log-scroll">
+                        {character.log.map((entry, i) => (
+                          <div key={i} className="log-entry">
+                            <span className="log-age">{entry.age}</span>
+                            <span className="log-text">{entry.text}</span>
+                          </div>
+                        ))}
+                        {lastResult && <div className="log-result">{lastResult}</div>}
+                        <div ref={logEndRef} />
+                      </div>
+                    </div>
+                  ) : (
+                    <FamilyPanel
+                      relatives={character.relatives}
+                      money={character.money}
+                      onInteract={interactWithRelative}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="controls">
@@ -688,7 +696,7 @@ export default function App() {
                 Back to Menu
               </button>
             </div>
-          ) : (
+          ) : character.age < MONTHLY_MODE_MIN_AGE ? (
             <button
               className="age-btn"
               onClick={ageUp}
@@ -696,6 +704,15 @@ export default function App() {
               title={pendingEvent ? 'Resolve the event first' : 'Advance one year'}
             >
               Age Up <span className="age-plus">+1</span>
+            </button>
+          ) : (
+            <button
+              className="age-btn"
+              onClick={nextMonth}
+              disabled={!!pendingEvent}
+              title={pendingEvent ? 'Resolve the event first' : 'Advance one month'}
+            >
+              Next Month <span className="age-plus">→</span>
             </button>
           )}
         </div>

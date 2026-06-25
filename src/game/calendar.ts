@@ -3,6 +3,19 @@ export const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+export const MONTHS_PER_YEAR = 12;
+// Below this age, the game still progresses one full year at a time.
+export const MONTHLY_MODE_MIN_AGE = 5;
+
+// `month` is 0-11, counting months since the character's last birthday.
+export function currentMonthName(birthMonth: number, month: number): string {
+  return MONTH_NAMES[(birthMonth - 1 + month) % 12];
+}
+
+export function monthsUntilNewAge(month: number): number {
+  return MONTHS_PER_YEAR - month;
+}
+
 export function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
