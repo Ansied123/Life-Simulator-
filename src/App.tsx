@@ -9,6 +9,7 @@ import { InventoryPanel } from './components/InventoryPanel';
 import { ShopPanel } from './components/ShopPanel';
 import { BirthCertificate } from './components/BirthCertificate';
 import { LicenseQuiz } from './components/LicenseQuiz';
+import { Analytics } from '@vercel/analytics/react';
 import type { StatKey } from './game/types';
 import { randomGender, randomFirstName, randomLastName } from './game/character';
 import { DRIVERS_LICENSE_EVENT_ID, TAKE_TEST_CHOICE_TEXT } from './game/events/drivers';
@@ -701,6 +702,7 @@ export default function App() {
         </div>
       </div>
       {globalUI}
+      <Analytics />
     </>
   );
 }
