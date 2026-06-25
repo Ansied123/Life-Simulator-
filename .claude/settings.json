@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node check-four-features.js)",
+      "Bash(node check-conflict-detail.js)",
+      "Bash(node check-parent-involvement.js)",
+      "Bash(node check-satisfaction-buff-and-scroll.js)",
+      "Bash(node check-classmates-scroll.js)",
+      "Bash(grep -rn \"age: c\\\\.age, text:\\\\|age: updated\\\\.age, text:\\\\|c\\\\.log,\\\\s*{\" --include=\"*.ts\" --include=\"*.tsx\" .)",
+      "Bash(node check-log-rework.js)",
+      "Bash(node check-school-scroll-and-jobs.js)",
+      "Bash(node check-sibling-jobs.js)",
+      "Bash(node check-kindergarten-calendar.js)",
+      "Bash(node check-kindergarten-end.js)",
+      "Bash(node check-grace-period-fix.js)",
+      "Bash(node check-school-year-display.js)",
+      "Bash(echo \"TSC:$?\")",
+      "Bash(echo \"LINT:$?\")",
+      "Bash(node check-fail-chances-stat.js)",
+      "Bash(node check-family-conflict-ui.js)",
+      "Bash(node check-family-monthly-stats.js)",
+      "Bash(node check-family-age-gating.js)",
+      "Bash(node check-young-sibling-play.js)",
+      "Bash(node check-monthly-decay.js)"
+    ]
+  }
+}

@@ -314,7 +314,7 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
 .tab-btn.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
 /* ===== Family panel ===== */
-.family-panel { display: flex; flex-direction: column; gap: 12px; }
+.family-panel { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
 .relative-card {
   background: var(--surface-soft);
   border: 1px solid var(--line);
@@ -332,9 +332,11 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
 }
 .relative-name { font-size: 1.0625rem; font-weight: 700; }
 .relative-meta { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 1px; white-space: nowrap; }
+.relative-job { font-size: 0.8125rem; color: var(--ink-soft); margin: -4px 0 8px; }
 .relative-actions { display: flex; gap: 8px; margin-top: 12px; }
 .relative-actions .secondary-btn { flex: 1; font-size: 0.75rem; padding: 10px 4px; }
 .relative-memory { font-style: italic; color: var(--ink-soft); margin: 4px 0 0; }
+.relative-locked-note { font-style: italic; color: var(--ink-soft); margin: 8px 0 0; font-size: 0.8125rem; }
 
 /* ===== Life log ===== */
 .log-panel {
@@ -358,6 +360,8 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
   font-weight: 700; color: var(--accent);
 }
 .log-text { color: var(--ink); }
+.log-text-major { font-weight: 700; }
+.log-text-self { color: var(--ink-soft); }
 .log-result {
   margin-top: 10px; padding: 10px 12px;
   background: var(--highlight); border-left: 3px solid var(--accent);
@@ -481,6 +485,44 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
 .settings-row-stacked { flex-direction: column; align-items: stretch; gap: 8px; }
 .settings-label { font-size: 1rem; }
 
+.volume-slider-row { display: flex; align-items: center; gap: 10px; }
+.volume-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.volume-slider::-moz-range-track {
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+}
+.volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.volume-value { font-size: 0.75rem; color: var(--ink-soft); width: 32px; text-align: right; flex-shrink: 0; }
+
 .text-size-toggle { display: flex; gap: 8px; }
 .text-size-btn {
   flex: 1;
@@ -541,6 +583,7 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
 }
 .corner-btn:hover { opacity: 1; background: var(--surface-hover); border-color: var(--accent); }
 .corner-btn-danger:hover { color: var(--accent); }
+.gear-btn { font-size: 0.9375rem; padding: 6px 9px; line-height: 1; }
 
 .top-left-controls {
   position: fixed;
@@ -641,9 +684,13 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
   border-radius: 3px;
 }
 .inventory-icon { font-size: 1.5rem; }
-.inventory-info { display: flex; flex-direction: column; }
+.inventory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .inventory-name { font-weight: 700; }
+.inventory-desc { font-size: 0.75rem; color: var(--ink-soft); }
 .inventory-meta { font-size: 0.75rem; color: var(--ink-soft); }
+.inventory-item-clickable { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.inventory-item-clickable:hover { background: var(--surface-hover); border-color: var(--accent); }
+.inventory-chevron { font-size: 1.25rem; color: var(--ink-soft); flex-shrink: 0; }
 
 /* ===== Shop ===== */
 .shop-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
@@ -708,6 +755,10 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
   flex-shrink: 0;
 }
 .certificate-value { font-weight: 600; text-align: right; }
+.certificate-row-stacked { flex-direction: column; align-items: flex-start; gap: 6px; }
+.certificate-comment { margin: 0; font-style: italic; font-size: 0.875rem; }
+.certificate-awards-list { margin: 0; padding-left: 18px; font-size: 0.875rem; }
+.certificate-awards-list li { padding: 2px 0; }
 
 /* ===== Driving quiz ===== */
 .quiz { display: flex; flex-direction: column; gap: 16px; }
@@ -736,6 +787,148 @@ select.name-input:disabled { cursor: not-allowed; opacity: 0.7; }
 .quiz-score { font-size: 2.5rem; font-weight: 800; margin: 0 0 6px; }
 .quiz-score.pass { color: var(--stat-health); }
 .quiz-score.fail { color: var(--accent); }
+
+/* ===== School ===== */
+.school-panel { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+
+.school-info-card,
+.student-info-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.school-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.school-info-title {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-soft);
+}
+.fold-toggle-btn {
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.fold-toggle-btn:hover { color: var(--accent); }
+.school-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--paper-edge);
+}
+.school-info-row:last-of-type { border-bottom: none; }
+.school-info-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+.school-info-value { font-weight: 600; text-align: right; }
+.school-info-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.school-info-actions .secondary-btn { flex: 1 1 calc(50% - 4px); }
+
+.student-info-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+.student-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+}
+.student-stat-row + .stat-track { margin-bottom: 10px; }
+
+/* ===== Parent involvement ===== */
+.parent-involvement-panel { display: flex; flex-direction: column; gap: 4px; }
+.parent-involvement-panel .death-note { margin: 0 0 12px; }
+.parent-involvement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.parent-involvement-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.parent-involvement-name { font-weight: 700; font-size: 0.875rem; }
+.parent-involvement-meta { font-size: 0.75rem; color: var(--ink-soft); }
+
+.classmates-section { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.classmate-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+}
+.conflict-reason {
+  margin: 10px 0 0;
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: var(--accent);
+}
+
+.study-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+.study-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.study-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.study-name { font-weight: 700; }
+.study-meta { font-size: 0.75rem; color: var(--ink-soft); }
+.study-btn { flex-shrink: 0; white-space: nowrap; }
+
+.school-actions-panel { display: flex; flex-direction: column; gap: 14px; }
+.school-actions-list { display: flex; flex-direction: column; gap: 10px; max-height: 55vh; overflow-y: auto; }
+.school-action-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.school-action-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.school-action-name { font-weight: 700; }
+.school-action-meta { font-size: 0.75rem; color: var(--ink-soft); }
+.school-action-btn { flex-shrink: 0; white-space: nowrap; }
+
+.dropout-section { border-top: 1px dashed var(--line); padding-top: 14px; }
+.dropout-btn { width: 100%; opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

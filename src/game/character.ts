@@ -3,6 +3,7 @@ import { randomGender, randomFirstName, randomLastName } from './names';
 import { generateFamily, describeFamily } from './family';
 import { randomBirthYear, randomBirthDate } from './calendar';
 import { generateAddress } from './address';
+import { applySchoolEffects } from './school';
 
 export { randomGender, randomFirstName, randomLastName };
 
@@ -40,7 +41,8 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
 
   const relatives = generateFamily(last);
   const familyNote = describeFamily(relatives);
-  const birthText = `${fullName} was born a ${gender} baby.${familyNote ? ` ${familyNote}` : ''}`;
+  const address = generateAddress();
+  const birthText = `${fullName} was born a ${gender} baby. The family lives at ${address}.${familyNote ? ` ${familyNote}` : ''}`;
 
   const birthYear = randomBirthYear();
   const { month: birthMonth, day: birthDay } = randomBirthDate(birthYear);
@@ -57,11 +59,13 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
     stats,
     relatives,
     inventory: [],
-    address: generateAddress(),
+    address,
     birthYear,
     birthMonth,
     birthDay,
-    log: [{ age: 0, text: birthText }],
+    school: null,
+    completedKindergarten: false,
+    log: [{ age: 0, month: 0, text: birthText }],
   };
 }
 
@@ -76,7 +80,7 @@ export function applyEffects(c: Character, effects: Effects): Character {
   };
 
   const log: LogEntry[] = effects.log
-    ? [...c.log, { age: c.age, text: effects.log }]
+    ? [...c.log, { age: c.age, month: c.month, text: effects.log, kind: effects.logKind }]
     : c.log;
 
   const relatives = effects.relativeEffects
@@ -86,10 +90,13 @@ export function applyEffects(c: Character, effects: Effects): Character {
       })
     : c.relatives;
 
+  const school = effects.schoolEffects || effects.classmateEffects ? applySchoolEffects(c, effects) : c.school;
+
   return {
     ...c,
     stats,
     relatives,
+    school,
     money: c.money + (effects.money ?? 0),
     job: effects.job !== undefined ? effects.job : c.job,
     log,

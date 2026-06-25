@@ -1,7 +1,7 @@
 const FIRST_NAMES_M = [
   'James', 'Liam', 'Noah', 'Ethan', 'Mason', 'Lucas', 'Oliver', 'Aiden',
   'William', 'Benjamin', 'Elijah', 'Henry', 'Alexander', 'Jacob', 'Michael', 'Daniel',
-  'Logan', 'Jackson', 'Sebastian', 'Jack', 'Owen', 'Samuel', 'Matthew', 'Joseph',
+  'Logan', 'Andy', 'Jackson', 'Sebastian', 'Jack', 'Owen', 'Samuel', 'Matthew', 'Joseph',
   'Levi', 'Mateo', 'David', 'John', 'Wyatt', 'Carter', 'Julian', 'Luke',
   'Grayson', 'Isaac', 'Jayden', 'Theodore', 'Gabriel', 'Anthony', 'Dylan', 'Leo',
   'Lincoln', 'Jaxon', 'Asher', 'Christopher', 'Josiah', 'Andrew', 'Thomas', 'Joshua',
@@ -44,7 +44,7 @@ const LAST_NAMES = [
   'Reed', 'Kelly', 'Howard', 'Ramos', 'Kim', 'Cox', 'Ward', 'Richardson',
   'Watson', 'Brooks', 'Chavez', 'Wood', 'James', 'Bennett', 'Gray', 'Mendoza',
   'Ruiz', 'Hughes', 'Price', 'Alvarez', 'Castillo', 'Sanders', 'Patel', 'Myers',
-  'Long', 'Ross', 'Foster', 'Jimenez', 'Powell', 'Jenkins', 'Perry', 'Russell',
+  'Long', 'Ross', 'Ronaldo', 'Foster', 'Jimenez', 'Powell', 'Jenkins', 'Perry', 'Russell',
   'Sullivan', 'Bell', 'Coleman', 'Butler', 'Henderson', 'Barnes', 'Gonzales', 'Fisher',
 ];
 

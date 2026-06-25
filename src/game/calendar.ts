@@ -3,6 +3,11 @@ export const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+export const MONTH_ABBREVIATIONS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
 export const MONTHS_PER_YEAR = 12;
 // Below this age, the game still progresses one full year at a time.
 export const MONTHLY_MODE_MIN_AGE = 5;
@@ -10,6 +15,22 @@ export const MONTHLY_MODE_MIN_AGE = 5;
 // `month` is 0-11, counting months since the character's last birthday.
 export function currentMonthName(birthMonth: number, month: number): string {
   return MONTH_NAMES[(birthMonth - 1 + month) % 12];
+}
+
+export function currentMonthAbbrev(birthMonth: number, month: number): string {
+  return MONTH_ABBREVIATIONS[(birthMonth - 1 + month) % 12];
+}
+
+// 1-12, the actual calendar month `month` (months since the character's
+// last birthday) currently lands on.
+export function currentCalendarMonth(birthMonth: number, month: number): number {
+  return ((birthMonth - 1 + month) % 12) + 1;
+}
+
+// The calendar year `age`/`month` (relative to the character's birthday)
+// lands on, accounting for the wrap past December.
+export function calendarYearAt(birthYear: number, birthMonth: number, age: number, month: number): number {
+  return birthYear + age + Math.floor((birthMonth - 1 + month) / 12);
 }
 
 export function monthsUntilNewAge(month: number): number {

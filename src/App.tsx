@@ -9,17 +9,25 @@ import { InventoryPanel } from './components/InventoryPanel';
 import { ShopPanel } from './components/ShopPanel';
 import { BirthCertificate } from './components/BirthCertificate';
 import { LicenseQuiz } from './components/LicenseQuiz';
+import { SchoolPanel } from './components/SchoolPanel';
+import { ReportCard } from './components/ReportCard';
+import { ClassmatesPanel } from './components/ClassmatesPanel';
+import { StudyPanel } from './components/StudyPanel';
+import { SchoolActionsPanel } from './components/SchoolActionsPanel';
+import { ParentInvolvementPanel } from './components/ParentInvolvementPanel';
+import { ProgressReportView } from './components/ProgressReportView';
 import { Analytics } from '@vercel/analytics/react';
-import type { StatKey } from './game/types';
+import type { StatKey, Item } from './game/types';
 import { randomGender, randomFirstName, randomLastName } from './game/character';
 import { DRIVERS_LICENSE_EVENT_ID, TAKE_TEST_CHOICE_TEXT } from './game/events/drivers';
-import { MONTHLY_MODE_MIN_AGE } from './game/calendar';
+import { MONTHLY_MODE_MIN_AGE, currentMonthAbbrev } from './game/calendar';
+import { initButtonSounds, setSoundMuted, setMusicVolume, playMainMenuMusic, playInGameMusic } from './sound';
 import './App.css';
 
 const STAT_ORDER: StatKey[] = ['health', 'happiness', 'smarts', 'looks'];
 const SUFFIX_OPTIONS = ['', 'Jr.', 'Sr.', 'I', 'II', 'III', 'IV', 'V'];
 const TEXT_SIZES = ['small', 'medium', 'large'] as const;
-const APP_VERSION = 'v1.3';
+const APP_VERSION = 'v1.4';
 const SHOP_MIN_AGE = 12;
 
 type Theme = 'light' | 'dark';
@@ -27,6 +35,8 @@ type TextSize = (typeof TEXT_SIZES)[number];
 const THEME_KEY = 'lifesim_theme';
 const TEXT_SIZE_KEY = 'lifesim_text_size';
 const MUTED_KEY = 'lifesim_muted';
+const MUSIC_VOLUME_KEY = 'lifesim_music_volume';
+const DEFAULT_MUSIC_VOLUME = 50;
 const ADMIN_PASSWORD = '669988';
 
 function getInitialTheme(): Theme {
@@ -57,11 +67,26 @@ function getInitialMuted(): boolean {
   }
 }
 
+function getInitialMusicVolume(): number {
+  try {
+    const raw = localStorage.getItem(MUSIC_VOLUME_KEY);
+    if (raw !== null) {
+      const saved = Number(raw);
+      if (Number.isFinite(saved)) return Math.max(0, Math.min(100, saved));
+    }
+  } catch {
+    // localStorage unavailable; fall back to the default.
+  }
+  return DEFAULT_MUSIC_VOLUME;
+}
+
 export default function App() {
   const {
     character,
     pendingEvent,
     lastResult,
+    lastClassmateConflict,
+    lastFamilyConflict,
     livesLived,
     startNewLife,
     deleteCharacter,
@@ -69,6 +94,10 @@ export default function App() {
     nextMonth,
     chooseOption,
     interactWithRelative,
+    interactWithClassmate,
+    interactWithSubject,
+    performSchoolAction,
+    quitSchool,
     resolveLicenseTest,
     buyItem,
     setStat,
@@ -77,18 +106,24 @@ export default function App() {
     endCharacter,
   } = useGame();
   const [screen, setScreen] = useState<'menu' | 'create' | 'game'>('menu');
-  const [view, setView] = useState<'log' | 'family'>('log');
+  const [view, setView] = useState<'log' | 'family' | 'school' | 'classmates'>('log');
   const [showSettings, setShowSettings] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSignInNotice, setShowSignInNotice] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
+  const [viewingItem, setViewingItem] = useState<Item | null>(null);
   const [showShop, setShowShop] = useState(false);
   const [showBirthCertificate, setShowBirthCertificate] = useState(false);
   const [showLicenseQuiz, setShowLicenseQuiz] = useState(false);
+  const [showReportCard, setShowReportCard] = useState(false);
+  const [showStudyPanel, setShowStudyPanel] = useState(false);
+  const [showSchoolActions, setShowSchoolActions] = useState(false);
+  const [showParentInvolvement, setShowParentInvolvement] = useState(false);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [textSize, setTextSize] = useState<TextSize>(getInitialTextSize);
   const [muted, setMuted] = useState<boolean>(getInitialMuted);
+  const [musicVolume, setMusicVolumeState] = useState<number>(getInitialMusicVolume);
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -120,6 +155,7 @@ export default function App() {
   }, [textSize]);
 
   useEffect(() => {
+    setSoundMuted(muted);
     try {
       localStorage.setItem(MUTED_KEY, String(muted));
     } catch {
@@ -127,10 +163,69 @@ export default function App() {
     }
   }, [muted]);
 
-  // Auto-scroll the life log to the newest entry.
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [character?.log.length]);
+    setMusicVolume(musicVolume);
+    try {
+      localStorage.setItem(MUSIC_VOLUME_KEY, String(musicVolume));
+    } catch {
+      // localStorage unavailable; music volume just won't persist across sessions.
+    }
+  }, [musicVolume]);
+
+  // Toggling mute on also silences music, by dragging the volume bar to 0.
+  const toggleMuted = () => {
+    setMuted((m) => {
+      const next = !m;
+      if (next) setMusicVolumeState(0);
+      return next;
+    });
+  };
+
+  // Wires a click/switch sound to every button in the app, once.
+  useEffect(() => {
+    initButtonSounds();
+  }, []);
+
+  // The Admin button is hidden from the UI; this secret keybind reopens the
+  // admin login instead.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setAdminPassword('');
+        setAdminError(false);
+        setAdminStage('login');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Background music: the main menu theme plays on the menu/creation
+  // screens, swapping to the in-game theme once the player enters a life.
+  useEffect(() => {
+    if (screen === 'game') {
+      playInGameMusic();
+    } else {
+      playMainMenuMusic();
+    }
+  }, [screen]);
+
+  // Auto-scroll the life log to the newest entry: on new entries, and also
+  // whenever the player switches back to the Life Record tab.
+  useEffect(() => {
+    if (view === 'log') {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [character?.log.length, view]);
+
+  // If school ends (manual drop-out or auto-drop-out), fall back to a tab
+  // that still exists instead of leaving School/Classmates selected but gone.
+  useEffect(() => {
+    if (!character?.school && (view === 'school' || view === 'classmates')) {
+      setView('log');
+    }
+  }, [character?.school, view]);
 
   const randomizeIdentity = () => {
     const g = randomGender();
@@ -142,12 +237,6 @@ export default function App() {
   const beginLife = () => {
     startNewLife({ firstName, middleName, lastName, suffix, gender });
     setScreen('game');
-  };
-
-  const openAdminLogin = () => {
-    setAdminPassword('');
-    setAdminError(false);
-    setAdminStage('login');
   };
 
   const submitAdminLogin = (e: FormEvent) => {
@@ -167,12 +256,74 @@ export default function App() {
         <button className="corner-btn" onClick={() => setShowSignInNotice(true)}>
           Sign In
         </button>
-        <button className="corner-btn" onClick={openAdminLogin}>
-          Admin
-        </button>
       </div>
 
       <div className="version-tag">{APP_VERSION}</div>
+
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span>Settings</span>
+              <button className="close-btn" onClick={() => setShowSettings(false)} aria-label="Close settings">
+                ×
+              </button>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Night Mode</span>
+              <button
+                className={`toggle-switch ${theme === 'dark' ? 'on' : ''}`}
+                role="switch"
+                aria-checked={theme === 'dark'}
+                onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Mute Volume</span>
+              <button
+                className={`toggle-switch ${muted ? 'on' : ''}`}
+                role="switch"
+                aria-checked={muted}
+                onClick={toggleMuted}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+            <div className="settings-row settings-row-stacked">
+              <span className="settings-label">Music Volume</span>
+              <div className="volume-slider-row">
+                <input
+                  type="range"
+                  className="volume-slider"
+                  min={0}
+                  max={100}
+                  value={musicVolume}
+                  onChange={(e) => setMusicVolumeState(Number(e.target.value))}
+                  aria-label="Music volume"
+                />
+                <span className="volume-value">{musicVolume}%</span>
+              </div>
+            </div>
+            <div className="settings-row settings-row-stacked">
+              <span className="settings-label">Text Size</span>
+              <div className="text-size-toggle">
+                {TEXT_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`text-size-btn ${textSize === size ? 'selected' : ''}`}
+                    onClick={() => setTextSize(size)}
+                  >
+                    {size.charAt(0).toUpperCase() + size.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSignInNotice && (
         <div className="settings-overlay" onClick={() => setShowSignInNotice(false)}>
@@ -345,60 +496,6 @@ export default function App() {
             </div>
           )}
 
-          {showSettings && (
-            <div className="settings-overlay" onClick={() => setShowSettings(false)}>
-              <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="settings-header">
-                  <span>Settings</span>
-                  <button
-                    className="close-btn"
-                    onClick={() => setShowSettings(false)}
-                    aria-label="Close settings"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-label">Night Mode</span>
-                  <button
-                    className={`toggle-switch ${theme === 'dark' ? 'on' : ''}`}
-                    role="switch"
-                    aria-checked={theme === 'dark'}
-                    onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-                <div className="settings-row">
-                  <span className="settings-label">Mute Volume</span>
-                  <button
-                    className={`toggle-switch ${muted ? 'on' : ''}`}
-                    role="switch"
-                    aria-checked={muted}
-                    onClick={() => setMuted((m) => !m)}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-                <div className="settings-row settings-row-stacked">
-                  <span className="settings-label">Text Size</span>
-                  <div className="text-size-toggle">
-                    {TEXT_SIZES.map((size) => (
-                      <button
-                        key={size}
-                        type="button"
-                        className={`text-size-btn ${textSize === size ? 'selected' : ''}`}
-                        onClick={() => setTextSize(size)}
-                      >
-                        {size.charAt(0).toUpperCase() + size.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <p className="contact-footer">Contact Information: dddxyf@outlook.com</p>
         </div>
         {globalUI}
@@ -512,6 +609,23 @@ export default function App() {
   if (!character) return null;
   const dead = !character.alive;
 
+  // The left log column shows the age once on the birthday-month entry, the
+  // abbreviated month for the next narrative entry of a new month, and
+  // nothing for self-initiated actions or repeats within the same month.
+  let lastLogAge: number | null = null;
+  let lastLogMonth: number | null = null;
+  const logRows = character.log.map((entry) => {
+    let marker = '';
+    if (entry.kind !== 'self') {
+      if (lastLogAge !== entry.age || lastLogMonth !== entry.month) {
+        marker = entry.month === 0 ? String(entry.age) : currentMonthAbbrev(character.birthMonth, entry.month);
+      }
+      lastLogAge = entry.age;
+      lastLogMonth = entry.month;
+    }
+    return { entry, marker };
+  });
+
   return (
     <>
       <div className="app">
@@ -521,6 +635,14 @@ export default function App() {
           </button>
           <button className="corner-btn corner-btn-danger" onClick={() => setShowEndConfirm(true)}>
             End Game
+          </button>
+          <button
+            className="corner-btn gear-btn"
+            onClick={() => setShowSettings(true)}
+            aria-label="Settings"
+            title="Settings"
+          >
+            ⚙
           </button>
         </div>
 
@@ -556,15 +678,42 @@ export default function App() {
         )}
 
         {showInventory && (
-          <div className="settings-overlay" onClick={() => setShowInventory(false)}>
+          <div
+            className="settings-overlay"
+            onClick={() => {
+              setShowInventory(false);
+              setViewingItem(null);
+            }}
+          >
             <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
               <div className="settings-header">
                 <span>Inventory</span>
-                <button className="close-btn" onClick={() => setShowInventory(false)} aria-label="Close">
+                <button
+                  className="close-btn"
+                  onClick={() => {
+                    setShowInventory(false);
+                    setViewingItem(null);
+                  }}
+                  aria-label="Close"
+                >
                   ×
                 </button>
               </div>
-              <InventoryPanel items={character.inventory} />
+              <InventoryPanel items={character.inventory} onOpenItem={setViewingItem} />
+            </div>
+          </div>
+        )}
+
+        {viewingItem?.progressReport && (
+          <div className="settings-overlay" onClick={() => setViewingItem(null)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>{viewingItem.name}</span>
+                <button className="close-btn" onClick={() => setViewingItem(null)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <ProgressReportView report={viewingItem.progressReport} />
             </div>
           </div>
         )}
@@ -593,6 +742,69 @@ export default function App() {
                 </button>
               </div>
               <BirthCertificate character={character} />
+            </div>
+          </div>
+        )}
+
+        {showReportCard && (
+          <div className="settings-overlay" onClick={() => setShowReportCard(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Report Card</span>
+                <button className="close-btn" onClick={() => setShowReportCard(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <ReportCard character={character} />
+            </div>
+          </div>
+        )}
+
+        {showStudyPanel && character.school && (
+          <div className="settings-overlay" onClick={() => setShowStudyPanel(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Study</span>
+                <button className="close-btn" onClick={() => setShowStudyPanel(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <StudyPanel school={character.school} onStudy={interactWithSubject} />
+            </div>
+          </div>
+        )}
+
+        {showSchoolActions && character.school && (
+          <div className="settings-overlay" onClick={() => setShowSchoolActions(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>School Actions</span>
+                <button className="close-btn" onClick={() => setShowSchoolActions(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <SchoolActionsPanel
+                school={character.school}
+                onPerform={performSchoolAction}
+                onDropOut={() => {
+                  quitSchool();
+                  setShowSchoolActions(false);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {showParentInvolvement && character.school && (
+          <div className="settings-overlay" onClick={() => setShowParentInvolvement(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Parent Involvement</span>
+                <button className="close-btn" onClick={() => setShowParentInvolvement(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <ParentInvolvementPanel character={character} />
             </div>
           </div>
         )}
@@ -655,27 +867,61 @@ export default function App() {
                     >
                       Family ({character.relatives.filter((r) => r.alive).length})
                     </button>
+                    {character.school && (
+                      <>
+                        <button
+                          className={`tab-btn ${view === 'school' ? 'active' : ''}`}
+                          onClick={() => setView('school')}
+                        >
+                          School
+                        </button>
+                        <button
+                          className={`tab-btn ${view === 'classmates' ? 'active' : ''}`}
+                          onClick={() => setView('classmates')}
+                        >
+                          Classmates
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   {view === 'log' ? (
                     <div className="log-panel">
                       <div className="log-header">Life Record</div>
                       <div className="log-scroll">
-                        {character.log.map((entry, i) => (
+                        {logRows.map(({ entry, marker }, i) => (
                           <div key={i} className="log-entry">
-                            <span className="log-age">{entry.age}</span>
-                            <span className="log-text">{entry.text}</span>
+                            <span className="log-age">{marker}</span>
+                            <span className={`log-text ${entry.kind ? `log-text-${entry.kind}` : ''}`}>
+                              {entry.text}
+                            </span>
                           </div>
                         ))}
                         {lastResult && <div className="log-result">{lastResult}</div>}
                         <div ref={logEndRef} />
                       </div>
                     </div>
-                  ) : (
+                  ) : view === 'family' ? (
                     <FamilyPanel
                       relatives={character.relatives}
                       money={character.money}
+                      characterAge={character.age}
                       onInteract={interactWithRelative}
+                      conflict={lastFamilyConflict}
+                    />
+                  ) : view === 'school' ? (
+                    <SchoolPanel
+                      character={character}
+                      onOpenReportCard={() => setShowReportCard(true)}
+                      onOpenStudy={() => setShowStudyPanel(true)}
+                      onOpenSchoolActions={() => setShowSchoolActions(true)}
+                      onOpenParentInvolvement={() => setShowParentInvolvement(true)}
+                    />
+                  ) : (
+                    <ClassmatesPanel
+                      school={character.school}
+                      onInteract={interactWithClassmate}
+                      conflict={lastClassmateConflict}
                     />
                   )}
                 </>

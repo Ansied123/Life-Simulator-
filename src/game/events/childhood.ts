@@ -13,24 +13,6 @@ export const childhoodEvents: GameEvent[] = [
     ],
   },
   {
-    id: 'kindergarten',
-    once: true,
-    condition: (c) => c.age >= 5 && c.age <= 6,
-    text: () => 'It is your first day of kindergarten. A kid offers to share their crayons.',
-    choices: [
-      {
-        text: 'Make a new friend',
-        result: 'You spent the day drawing together.',
-        effects: { happiness: 8, log: 'Made a friend in kindergarten.' },
-      },
-      {
-        text: 'Keep to yourself',
-        result: 'You played alone, but learned your colors well.',
-        effects: { smarts: 4, happiness: -2 },
-      },
-    ],
-  },
-  {
     id: 'lost_tooth',
     condition: (c) => c.age >= 6 && c.age <= 8,
     weight: 0.6,
@@ -43,7 +25,7 @@ export const childhoodEvents: GameEvent[] = [
   {
     id: 'sick',
     condition: (c) => c.age >= 2 && c.age <= 11,
-    weight: 0.5,
+    weight: 0.12,
     text: () => 'You came down with a nasty flu.',
     choices: [
       { text: 'Rest in bed', effects: { health: -4, log: 'You were sick with the flu.' } },

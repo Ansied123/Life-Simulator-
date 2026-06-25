@@ -1,9 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Character, GameEvent, Choice, StatKey, Item } from './game/types';
+import type { Character, GameEvent, Choice, StatKey, Item, SchoolSubject } from './game/types';
 import type { CharacterCreationInput } from './game/character';
 import { createCharacter, applyEffects, clamp } from './game/character';
 import { naturalAging, rollDeath, ageRelatives } from './game/engine';
-import { rollAdditionalSiblings } from './game/family';
+import { rollAdditionalSiblings, rollFamilyInteraction, tickFamilyMonthly, FAMILY_YOUNG_AGE_CUTOFF } from './game/family';
+import {
+  maybeEnrollInSchool,
+  resetMonthlySchoolFlags,
+  maybeAutoDropOut,
+  dropOutOfSchool,
+  checkSchoolAwards,
+  maybeEndKindergarten,
+  rollClassmateInteraction,
+  updateParentInvolvement,
+  parentSatisfactionRelationshipMultiplier,
+} from './game/school';
+import { SCHOOL_ACTIONS, schoolActionToEffects } from './game/schoolActions';
 import { pickEvent } from './game/events';
 import { DRIVERS_LICENSE_EVENT } from './game/events/drivers';
 import { MONTHS_PER_YEAR } from './game/calendar';
@@ -18,6 +30,11 @@ interface GameState {
   pendingEvent: GameEvent | null;
   // Flavor text shown after a choice is made.
   lastResult: string | null;
+  // The most recent classmate interaction that triggered a conflict, if any;
+  // cleared by any other state-changing action.
+  lastClassmateConflict: { classmateId: string; reason: string } | null;
+  // Same idea, for family interactions.
+  lastFamilyConflict: { relativeId: string; reason: string } | null;
 }
 
 // Shared by ageUp (ages 0-4) and nextMonth's year-wrap (age 5+): ages the
@@ -27,6 +44,7 @@ function advanceYear(c: Character, firedOnce: Set<string>): { character: Charact
   updated = naturalAging(updated);
   updated = ageRelatives(updated);
   updated = rollAdditionalSiblings(updated);
+  updated = tickFamilyMonthly(updated);
 
   const cause = rollDeath(updated);
   if (cause) {
@@ -35,11 +53,16 @@ function advanceYear(c: Character, firedOnce: Set<string>): { character: Charact
         ...updated,
         alive: false,
         causeOfDeath: cause,
-        log: [...updated.log, { age: updated.age, text: `Died of ${cause} at age ${updated.age}.` }],
+        log: [...updated.log, { age: updated.age, month: updated.month, text: `Died of ${cause} at age ${updated.age}.`, kind: 'major' }],
       },
       pendingEvent: null,
     };
   }
+
+  updated = maybeEnrollInSchool(updated);
+  updated = checkSchoolAwards(updated);
+  updated = updateParentInvolvement(updated);
+  updated = maybeEndKindergarten(updated);
 
   // The driver's license offer is a once-in-a-lifetime, age-16-only check:
   // 70% of the time it's guaranteed to show that year, 30% it never appears.
@@ -55,6 +78,8 @@ export function useGame() {
     character: null,
     pendingEvent: null,
     lastResult: null,
+    lastClassmateConflict: null,
+    lastFamilyConflict: null,
   });
   // Tracks which "once" events have already fired this life.
   const [firedOnce, setFiredOnce] = useState<Set<string>>(new Set());
@@ -64,7 +89,7 @@ export function useGame() {
   useEffect(() => {
     const save = loadGame();
     if (save) {
-      setState({ character: save.character, pendingEvent: null, lastResult: null });
+      setState({ character: save.character, pendingEvent: null, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null });
       setFiredOnce(new Set(save.firedOnce));
     }
   }, []);
@@ -80,7 +105,7 @@ export function useGame() {
     clearSave();
     const fresh = new Set<string>();
     setFiredOnce(fresh);
-    setState({ character: createCharacter(input), pendingEvent: null, lastResult: null });
+    setState({ character: createCharacter(input), pendingEvent: null, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null });
     setLivesLived(incrementLivesLived());
   }, []);
 
@@ -88,7 +113,7 @@ export function useGame() {
   const deleteCharacter = useCallback(() => {
     clearSave();
     setFiredOnce(new Set());
-    setState({ character: null, pendingEvent: null, lastResult: null });
+    setState({ character: null, pendingEvent: null, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null });
   }, []);
 
   // Advance one full year (ages 0-4, before monthly mode kicks in).
@@ -96,21 +121,33 @@ export function useGame() {
     setState((prev) => {
       if (!prev.character || !prev.character.alive) return prev;
       const { character, pendingEvent } = advanceYear(prev.character, firedOnce);
-      return { character, pendingEvent, lastResult: null };
+      return { character, pendingEvent, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null };
     });
   }, [firedOnce]);
 
   // Advance one month (age 5+). Wraps into a full advanceYear once 12
-  // months have passed since the last birthday.
+  // months have passed since the last birthday; otherwise just ticks the
+  // month and still rolls the event pool, same as a yearly age-up did.
   const nextMonth = useCallback(() => {
     setState((prev) => {
       if (!prev.character || !prev.character.alive) return prev;
       const c = prev.character;
       if (c.month + 1 >= MONTHS_PER_YEAR) {
         const { character, pendingEvent } = advanceYear(c, firedOnce);
-        return { character, pendingEvent, lastResult: null };
+        return { character: resetMonthlySchoolFlags(character), pendingEvent, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null };
       }
-      return { character: { ...c, month: c.month + 1 }, pendingEvent: null, lastResult: null };
+      let updated: Character = { ...c, month: c.month + 1 };
+      // Enrollment (September) and graduation (May) are checked every month,
+      // since they rarely line up with the character's own birthday.
+      updated = maybeEnrollInSchool(updated);
+      updated = resetMonthlySchoolFlags(updated);
+      updated = tickFamilyMonthly(updated);
+      updated = checkSchoolAwards(updated);
+      updated = updateParentInvolvement(updated);
+      updated = maybeEndKindergarten(updated);
+      updated = maybeAutoDropOut(updated);
+      const event = pickEvent(updated, firedOnce);
+      return { character: updated, pendingEvent: event, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null };
     });
   }, [firedOnce]);
 
@@ -126,6 +163,8 @@ export function useGame() {
         character: updated,
         pendingEvent: null,
         lastResult: choice.result ?? null,
+        lastClassmateConflict: null,
+        lastFamilyConflict: null,
       };
     });
   }, []);
@@ -140,6 +179,7 @@ export function useGame() {
         ...c.log,
         {
           age: c.age,
+          month: c.month,
           text: passed
             ? `Passed the driving test with a score of ${score}/10 and got a driver's license!`
             : `Failed the driving test with a score of ${score}/10.`,
@@ -149,7 +189,7 @@ export function useGame() {
         ? [...c.inventory, { id: 'drivers_license', name: "Driver's License", icon: '🪪', acquiredAge: c.age }]
         : c.inventory;
 
-      return { character: { ...c, inventory, log }, pendingEvent: null, lastResult: null };
+      return { character: { ...c, inventory, log }, pendingEvent: null, lastResult: null, lastClassmateConflict: null, lastFamilyConflict: null };
     });
   }, []);
 
@@ -166,7 +206,7 @@ export function useGame() {
           ...c,
           money: c.money - item.price,
           inventory: [...c.inventory, newItem],
-          log: [...c.log, { age: c.age, text: `Bought ${item.name} for $${item.price.toLocaleString()}.` }],
+          log: [...c.log, { age: c.age, month: c.month, text: `Bought ${item.name} for $${item.price.toLocaleString()}.` }],
         },
       };
     });
@@ -174,40 +214,44 @@ export function useGame() {
 
   // ===== Family interactions =====
 
-  const interactWithRelative = useCallback((relativeId: string, action: 'talk' | 'spendTime' | 'giveMoney') => {
+  const interactWithRelative = useCallback((relativeId: string, action: 'talk' | 'spendTime' | 'giveMoney' | 'play') => {
     setState((prev) => {
       if (!prev.character) return prev;
       const c = prev.character;
       const relative = c.relatives.find((r) => r.id === relativeId);
       if (!relative || !relative.alive) return prev;
-      if (action === 'talk' && relative.talkedThisYear) return prev;
-      if (action === 'spendTime' && relative.spentTimeThisYear) return prev;
-      if (action === 'giveMoney' && relative.gaveMoneyThisYear) return prev;
 
-      let relationshipDelta = 0;
-      let happinessDelta = 0;
-      let moneyDelta = 0;
-      let logText = '';
-      let flag: 'talkedThisYear' | 'spentTimeThisYear' | 'gaveMoneyThisYear';
+      const isParent = relative.role === 'mother' || relative.role === 'father';
+      const isYoungSibling = relative.role === 'sibling' && relative.age < FAMILY_YOUNG_AGE_CUTOFF;
 
-      if (action === 'talk') {
-        relationshipDelta = 5;
-        happinessDelta = 1;
-        flag = 'talkedThisYear';
-        logText = `Talked with ${relative.name}.`;
-      } else if (action === 'spendTime') {
-        relationshipDelta = 10;
-        happinessDelta = 3;
-        flag = 'spentTimeThisYear';
-        logText = `Spent quality time with ${relative.name}.`;
-      } else {
-        const amount = Math.min(100, c.money);
-        if (amount <= 0) return prev;
-        moneyDelta = -amount;
-        relationshipDelta = 15;
-        happinessDelta = 2;
-        flag = 'gaveMoneyThisYear';
-        logText = `Gave $${amount} to ${relative.name}.`;
+      // Parents can't be interacted with until the character is old enough;
+      // young siblings only get "play"; nobody else gets "play".
+      if (isParent && c.age < FAMILY_YOUNG_AGE_CUTOFF) return prev;
+      if (action === 'play' && !isYoungSibling) return prev;
+      if (action !== 'play' && isYoungSibling) return prev;
+
+      if (action === 'talk' && relative.talkedThisMonth) return prev;
+      if (action === 'spendTime' && relative.spentTimeThisMonth) return prev;
+      if (action === 'giveMoney' && relative.gaveMoneyThisMonth) return prev;
+      if (action === 'play' && relative.playedThisMonth) return prev;
+
+      let moneyAmount = 0;
+      if (action === 'giveMoney') {
+        moneyAmount = Math.min(100, c.money);
+        if (moneyAmount <= 0) return prev;
+      }
+
+      const flag =
+        action === 'talk' ? 'talkedThisMonth'
+        : action === 'spendTime' ? 'spentTimeThisMonth'
+        : action === 'giveMoney' ? 'gaveMoneyThisMonth'
+        : 'playedThisMonth';
+      const result = rollFamilyInteraction(action, relative, moneyAmount);
+
+      // A happy parent is more receptive; an upset one, less so.
+      let relationshipDelta = result.relationshipDelta;
+      if (isParent && c.school) {
+        relationshipDelta = Math.round(relationshipDelta * parentSatisfactionRelationshipMultiplier(c.school.parentSatisfaction));
       }
 
       const relatives = c.relatives.map((r) =>
@@ -219,11 +263,102 @@ export function useGame() {
         character: {
           ...c,
           relatives,
-          money: c.money + moneyDelta,
-          stats: { ...c.stats, happiness: clamp(c.stats.happiness + happinessDelta) },
-          log: [...c.log, { age: c.age, text: logText }],
+          money: c.money + result.moneyDelta,
+          stats: { ...c.stats, happiness: clamp(c.stats.happiness + result.happinessDelta) },
+          log: [...c.log, { age: c.age, month: c.month, text: result.logText, kind: 'self' }],
+        },
+        lastFamilyConflict: result.conflictReason ? { relativeId, reason: result.conflictReason } : null,
+        lastClassmateConflict: null,
+      };
+    });
+  }, []);
+
+  // ===== School: classmate interactions =====
+
+  const interactWithClassmate = useCallback((classmateId: string, action: 'play' | 'shareToy' | 'talk') => {
+    setState((prev) => {
+      if (!prev.character || !prev.character.school) return prev;
+      const c = prev.character;
+      const school = c.school!;
+      const classmate = school.classmates.find((cm) => cm.id === classmateId);
+      if (!classmate) return prev;
+      if (action === 'play' && classmate.playedThisMonth) return prev;
+      if (action === 'shareToy' && classmate.sharedToyThisMonth) return prev;
+      if (action === 'talk' && classmate.talkedThisMonth) return prev;
+
+      const flag =
+        action === 'play' ? 'playedThisMonth' : action === 'shareToy' ? 'sharedToyThisMonth' : 'talkedThisMonth';
+      const result = rollClassmateInteraction(action, classmate.name, c.stats.looks);
+
+      const classmates = school.classmates.map((cm) =>
+        cm.id === classmateId
+          ? { ...cm, [flag]: true, relationship: clamp(cm.relationship + result.relationshipDelta) }
+          : cm
+      );
+
+      return {
+        ...prev,
+        character: {
+          ...c,
+          school: { ...school, classmates, socialProgress: clamp(school.socialProgress + result.socialDelta) },
+          stats: { ...c.stats, happiness: clamp(c.stats.happiness + result.happinessDelta) },
+          log: [...c.log, { age: c.age, month: c.month, text: result.logText, kind: 'self' }],
+        },
+        lastClassmateConflict: result.conflictReason ? { classmateId, reason: result.conflictReason } : null,
+        lastFamilyConflict: null,
+      };
+    });
+  }, []);
+
+  // Studying a subject is usable once per subject, per month.
+  const interactWithSubject = useCallback((subject: SchoolSubject) => {
+    setState((prev) => {
+      if (!prev.character || !prev.character.school) return prev;
+      const c = prev.character;
+      const school = c.school!;
+      if (school.subjectsStudiedThisMonth[subject]) return prev;
+
+      return {
+        ...prev,
+        character: {
+          ...c,
+          school: {
+            ...school,
+            subjects: { ...school.subjects, [subject]: clamp(school.subjects[subject] + 8) },
+            subjectsStudiedThisMonth: { ...school.subjectsStudiedThisMonth, [subject]: true },
+          },
+          stats: { ...c.stats, smarts: clamp(c.stats.smarts + 1) },
+          log: [...c.log, { age: c.age, month: c.month, text: `Studied ${subject} at school.`, kind: 'self' }],
         },
       };
+    });
+  }, []);
+
+  // "School Actions" are usable once per action, per month.
+  const performSchoolAction = useCallback((actionId: string) => {
+    setState((prev) => {
+      if (!prev.character || !prev.character.school) return prev;
+      const c = prev.character;
+      if (c.school!.actionsUsedThisMonth.includes(actionId)) return prev;
+      const action = SCHOOL_ACTIONS.find((a) => a.id === actionId);
+      if (!action) return prev;
+
+      const updated = applyEffects(c, schoolActionToEffects(action));
+      return {
+        ...prev,
+        character: {
+          ...updated,
+          school: updated.school ? { ...updated.school, actionsUsedThisMonth: [...updated.school.actionsUsedThisMonth, actionId] } : updated.school,
+        },
+      };
+    });
+  }, []);
+
+  // Permanently withdraws the character from school, by their own choice.
+  const quitSchool = useCallback(() => {
+    setState((prev) => {
+      if (!prev.character || !prev.character.school) return prev;
+      return { ...prev, character: dropOutOfSchool(prev.character) };
     });
   }, []);
 
@@ -262,7 +397,7 @@ export function useGame() {
           ...c,
           alive: false,
           causeOfDeath: 'admin override',
-          log: [...c.log, { age: c.age, text: `${c.name} was ended by admin override at age ${c.age}.` }],
+          log: [...c.log, { age: c.age, month: c.month, text: `${c.name} was ended by admin override at age ${c.age}.`, kind: 'major' }],
         },
       };
     });
@@ -272,6 +407,8 @@ export function useGame() {
     character: state.character,
     pendingEvent: state.pendingEvent,
     lastResult: state.lastResult,
+    lastClassmateConflict: state.lastClassmateConflict,
+    lastFamilyConflict: state.lastFamilyConflict,
     livesLived,
     startNewLife,
     deleteCharacter,
@@ -279,6 +416,10 @@ export function useGame() {
     nextMonth,
     chooseOption,
     interactWithRelative,
+    interactWithClassmate,
+    interactWithSubject,
+    performSchoolAction,
+    quitSchool,
     resolveLicenseTest,
     buyItem,
     setStat,

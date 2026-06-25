@@ -1,5 +1,6 @@
 import type { Character, Relative } from './types';
 import { clamp } from './character';
+import { maybeAssignSiblingJob } from './family';
 
 // Each year, stats drift naturally based on age. This is what makes a
 // life feel like it has an arc even between scripted events.
@@ -48,11 +49,10 @@ function rollRelativeDeath(age: number): string | null {
 }
 
 const DEATH_HAPPINESS_PENALTY = 25;
-// Relationship lost per year when a relative gets no attention at all.
-const NEGLECT_DECAY = 5;
 
-// Ages every living relative by a year: rolls for death, decays relationship
-// when neglected, and resets this year's interaction flags either way.
+// Ages every living relative by a year and rolls for death. Relationship
+// decay/interaction-flag resets happen separately, on every monthly tick —
+// see tickFamilyMonthly in family.ts.
 export function ageRelatives(c: Character): Character {
   let log = c.log;
   let happinessPenalty = 0;
@@ -64,19 +64,11 @@ export function ageRelatives(c: Character): Character {
 
     if (cause) {
       happinessPenalty += DEATH_HAPPINESS_PENALTY;
-      log = [...log, { age: c.age, text: `${r.name}, your ${r.role}, passed away at age ${age}.` }];
+      log = [...log, { age: c.age, month: c.month, text: `${r.name}, your ${r.role}, passed away at age ${age}.`, kind: 'major' }];
       return { ...r, age, alive: false, causeOfDeath: cause };
     }
 
-    const neglected = !r.talkedThisYear && !r.spentTimeThisYear && !r.gaveMoneyThisYear;
-    return {
-      ...r,
-      age,
-      relationship: clamp(r.relationship - (neglected ? NEGLECT_DECAY : 0)),
-      talkedThisYear: false,
-      spentTimeThisYear: false,
-      gaveMoneyThisYear: false,
-    };
+    return maybeAssignSiblingJob({ ...r, age });
   });
 
   return {
