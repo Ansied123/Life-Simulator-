@@ -5,15 +5,26 @@ import { StatBar } from './components/StatBar';
 import { EventCard } from './components/EventCard';
 import { CharacterHeader } from './components/CharacterHeader';
 import { FamilyPanel } from './components/FamilyPanel';
+import { InventoryPanel } from './components/InventoryPanel';
+import { ShopPanel } from './components/ShopPanel';
+import { BirthCertificate } from './components/BirthCertificate';
+import { LicenseQuiz } from './components/LicenseQuiz';
 import type { StatKey } from './game/types';
 import { randomGender, randomFirstName, randomLastName } from './game/character';
+import { DRIVERS_LICENSE_EVENT_ID, TAKE_TEST_CHOICE_TEXT } from './game/events/drivers';
 import './App.css';
 
 const STAT_ORDER: StatKey[] = ['health', 'happiness', 'smarts', 'looks'];
 const SUFFIX_OPTIONS = ['', 'Jr.', 'Sr.', 'I', 'II', 'III', 'IV', 'V'];
+const TEXT_SIZES = ['small', 'medium', 'large'] as const;
+const APP_VERSION = 'v1.2';
+const SHOP_MIN_AGE = 12;
 
 type Theme = 'light' | 'dark';
+type TextSize = (typeof TEXT_SIZES)[number];
 const THEME_KEY = 'lifesim_theme';
+const TEXT_SIZE_KEY = 'lifesim_text_size';
+const MUTED_KEY = 'lifesim_muted';
 const ADMIN_PASSWORD = '669988';
 
 function getInitialTheme(): Theme {
@@ -26,16 +37,37 @@ function getInitialTheme(): Theme {
   return 'light';
 }
 
+function getInitialTextSize(): TextSize {
+  try {
+    const saved = localStorage.getItem(TEXT_SIZE_KEY);
+    if (saved === 'small' || saved === 'medium' || saved === 'large') return saved;
+  } catch {
+    // localStorage unavailable; fall back to medium.
+  }
+  return 'medium';
+}
+
+function getInitialMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const {
     character,
     pendingEvent,
     lastResult,
+    livesLived,
     startNewLife,
     deleteCharacter,
     ageUp,
     chooseOption,
     interactWithRelative,
+    resolveLicenseTest,
+    buyItem,
     setStat,
     setMoney,
     setJob,
@@ -45,7 +77,15 @@ export default function App() {
   const [view, setView] = useState<'log' | 'family'>('log');
   const [showSettings, setShowSettings] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSignInNotice, setShowSignInNotice] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [showBirthCertificate, setShowBirthCertificate] = useState(false);
+  const [showLicenseQuiz, setShowLicenseQuiz] = useState(false);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [textSize, setTextSize] = useState<TextSize>(getInitialTextSize);
+  const [muted, setMuted] = useState<boolean>(getInitialMuted);
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -56,7 +96,7 @@ export default function App() {
   const [adminError, setAdminError] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Sync the chosen theme to the document before paint, so the page doesn't flash light-then-dark.
+  // Sync the chosen theme and text size to the document before paint, so the page doesn't flash.
   useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.style.colorScheme = theme;
@@ -66,6 +106,23 @@ export default function App() {
       // localStorage unavailable; theme just won't persist across sessions.
     }
   }, [theme]);
+
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute('data-text-size', textSize);
+    try {
+      localStorage.setItem(TEXT_SIZE_KEY, textSize);
+    } catch {
+      // localStorage unavailable; text size just won't persist across sessions.
+    }
+  }, [textSize]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MUTED_KEY, String(muted));
+    } catch {
+      // localStorage unavailable; mute setting just won't persist across sessions.
+    }
+  }, [muted]);
 
   // Auto-scroll the life log to the newest entry.
   useEffect(() => {
@@ -101,11 +158,34 @@ export default function App() {
     setAdminPassword('');
   };
 
-  const adminUI = (
+  const globalUI = (
     <>
-      <button className="corner-btn admin-btn" onClick={openAdminLogin}>
-        Admin
-      </button>
+      <div className="top-right-controls">
+        <button className="corner-btn" onClick={() => setShowSignInNotice(true)}>
+          Sign In
+        </button>
+        <button className="corner-btn" onClick={openAdminLogin}>
+          Admin
+        </button>
+      </div>
+
+      <div className="version-tag">{APP_VERSION}</div>
+
+      {showSignInNotice && (
+        <div className="settings-overlay" onClick={() => setShowSignInNotice(false)}>
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span>Sign In</span>
+              <button className="close-btn" onClick={() => setShowSignInNotice(false)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <p className="death-note">
+              Accounts are coming soon. For now, your life is saved locally on this device.
+            </p>
+          </div>
+        </div>
+      )}
 
       {adminStage === 'login' && (
         <div className="settings-overlay" onClick={() => setAdminStage('closed')}>
@@ -200,15 +280,67 @@ export default function App() {
           <div className="masthead">
             <h1 className="title">LIFE FILE</h1>
             <p className="subtitle">A life, one year at a time.</p>
+            <p className="lives-tracker">Lives Lived: {livesLived}</p>
           </div>
           <div className="start-card">
-            <button className="primary-btn" onClick={() => setScreen(character?.alive ? 'game' : 'create')}>
+            {character?.alive && (
+              <div className="continue-row">
+                <button className="primary-btn continue-btn" onClick={() => setScreen('game')}>
+                  <span className="continue-label">Continue</span>
+                  <span className="continue-meta">
+                    {character.name} · Age {character.age}
+                  </span>
+                </button>
+                <button
+                  className="corner-btn corner-btn-danger delete-char-btn"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  aria-label="Delete character"
+                  title="Delete character"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+            <button
+              className={character?.alive ? 'secondary-btn' : 'primary-btn'}
+              onClick={() => setScreen('create')}
+            >
               Start
             </button>
             <button className="secondary-btn" onClick={() => setShowSettings(true)}>
               Settings
             </button>
           </div>
+
+          {showDeleteConfirm && character && (
+            <div className="settings-overlay" onClick={() => setShowDeleteConfirm(false)}>
+              <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="settings-header">
+                  <span>Delete Character</span>
+                  <button className="close-btn" onClick={() => setShowDeleteConfirm(false)} aria-label="Close">
+                    ×
+                  </button>
+                </div>
+                <p className="death-note">
+                  This will permanently delete {character.name} and cannot be undone. Are you sure?
+                </p>
+                <div className="confirm-actions">
+                  <button className="secondary-btn" onClick={() => setShowDeleteConfirm(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="primary-btn"
+                    onClick={() => {
+                      deleteCharacter();
+                      setShowDeleteConfirm(false);
+                    }}
+                  >
+                    Delete Character
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showSettings && (
             <div className="settings-overlay" onClick={() => setShowSettings(false)}>
@@ -234,11 +366,39 @@ export default function App() {
                     <span className="toggle-knob" />
                   </button>
                 </div>
+                <div className="settings-row">
+                  <span className="settings-label">Mute Volume</span>
+                  <button
+                    className={`toggle-switch ${muted ? 'on' : ''}`}
+                    role="switch"
+                    aria-checked={muted}
+                    onClick={() => setMuted((m) => !m)}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+                <div className="settings-row settings-row-stacked">
+                  <span className="settings-label">Text Size</span>
+                  <div className="text-size-toggle">
+                    {TEXT_SIZES.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        className={`text-size-btn ${textSize === size ? 'selected' : ''}`}
+                        onClick={() => setTextSize(size)}
+                      >
+                        {size.charAt(0).toUpperCase() + size.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
+
+          <p className="contact-footer">Contact Information: dddxyf@outlook.com</p>
         </div>
-        {adminUI}
+        {globalUI}
       </>
     );
   }
@@ -341,7 +501,7 @@ export default function App() {
             </button>
           </div>
         </div>
-        {adminUI}
+        {globalUI}
       </>
     );
   }
@@ -392,7 +552,60 @@ export default function App() {
           </div>
         )}
 
-        <CharacterHeader character={character} />
+        <CharacterHeader character={character} onViewDetails={() => setShowBirthCertificate(true)} />
+
+        <div className="feature-row">
+          <button className="feature-btn" onClick={() => setShowInventory(true)}>
+            <span className="feature-icon">🎒</span> Inventory
+          </button>
+          {character.age >= SHOP_MIN_AGE && (
+            <button className="feature-btn" onClick={() => setShowShop(true)}>
+              <span className="feature-icon">🛍️</span> Shop
+            </button>
+          )}
+        </div>
+
+        {showInventory && (
+          <div className="settings-overlay" onClick={() => setShowInventory(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Inventory</span>
+                <button className="close-btn" onClick={() => setShowInventory(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <InventoryPanel items={character.inventory} />
+            </div>
+          </div>
+        )}
+
+        {showShop && (
+          <div className="settings-overlay" onClick={() => setShowShop(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Shop</span>
+                <button className="close-btn" onClick={() => setShowShop(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <ShopPanel money={character.money} onBuy={buyItem} />
+            </div>
+          </div>
+        )}
+
+        {showBirthCertificate && (
+          <div className="settings-overlay" onClick={() => setShowBirthCertificate(false)}>
+            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-header">
+                <span>Birth Certificate</span>
+                <button className="close-btn" onClick={() => setShowBirthCertificate(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <BirthCertificate character={character} />
+            </div>
+          </div>
+        )}
 
         <div className="stats-grid">
           {STAT_ORDER.map((s) => (
@@ -401,8 +614,28 @@ export default function App() {
         </div>
 
         <div className="stage">
-          {pendingEvent ? (
-            <EventCard event={pendingEvent} character={character} onChoose={chooseOption} />
+          {showLicenseQuiz ? (
+            <div className="event-card">
+              <div className="event-stamp">DMV</div>
+              <LicenseQuiz
+                onComplete={(score, passed) => {
+                  resolveLicenseTest(score, passed);
+                  setShowLicenseQuiz(false);
+                }}
+              />
+            </div>
+          ) : pendingEvent ? (
+            <EventCard
+              event={pendingEvent}
+              character={character}
+              onChoose={(choice) => {
+                if (pendingEvent.id === DRIVERS_LICENSE_EVENT_ID && choice.text === TAKE_TEST_CHOICE_TEXT) {
+                  setShowLicenseQuiz(true);
+                  return;
+                }
+                chooseOption(choice);
+              }}
+            />
           ) : (
             <>
               <div className="tab-bar">
@@ -467,7 +700,7 @@ export default function App() {
           )}
         </div>
       </div>
-      {adminUI}
+      {globalUI}
     </>
   );
 }

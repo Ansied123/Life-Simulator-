@@ -1,4 +1,4 @@
-import type { Relative, RelativeRole } from './types';
+import type { Character, Relative, RelativeRole } from './types';
 import { randomGender, randomFirstName } from './names';
 
 let nextId = 0;
@@ -16,6 +16,7 @@ function makeRelative(role: RelativeRole, gender: 'male' | 'female', age: number
     age,
     alive: true,
     relationship: 55 + Math.round(Math.random() * 25),
+    married: role === 'mother' || role === 'father' ? true : undefined,
     talkedThisYear: false,
     spentTimeThisYear: false,
     gaveMoneyThisYear: false,
@@ -44,6 +45,45 @@ export function generateFamily(lastName: string): Relative[] {
   }
 
   return relatives;
+}
+
+const SIBLING_CHANCE_PER_YEAR = 0.12;
+const PARENT_FERTILE_MIN_AGE = 20;
+const PARENT_FERTILE_MAX_AGE = 45;
+
+function rollNewbornCount(): number {
+  const roll = Math.random();
+  if (roll < 0.88) return 1;
+  if (roll < 0.98) return 2; // twins
+  return 3; // triplets
+}
+
+// Each year, if both parents are alive, married, and of an appropriate age,
+// there's a small chance the household grows with 1-3 new siblings.
+export function rollAdditionalSiblings(c: Character): Character {
+  const mother = c.relatives.find((r) => r.role === 'mother' && r.alive);
+  const father = c.relatives.find((r) => r.role === 'father' && r.alive);
+  if (!mother || !father || !mother.married || !father.married) return c;
+
+  const inFertileRange = (r: Relative) => r.age >= PARENT_FERTILE_MIN_AGE && r.age <= PARENT_FERTILE_MAX_AGE;
+  if (!inFertileRange(mother) || !inFertileRange(father)) return c;
+  if (Math.random() >= SIBLING_CHANCE_PER_YEAR) return c;
+
+  const count = rollNewbornCount();
+  const newborns = Array.from({ length: count }, () => makeRelative('sibling', randomGender(), 0, c.lastName));
+  const names = newborns.map((s) => s.name).join(', ');
+  const log = [
+    ...c.log,
+    {
+      age: c.age,
+      text:
+        count === 1
+          ? `Your parents welcomed a new sibling into the family: ${names}.`
+          : `Your parents welcomed new siblings into the family: ${names}.`,
+    },
+  ];
+
+  return { ...c, relatives: [...c.relatives, ...newborns], log };
 }
 
 // A short sentence for the age-0 log entry, naming each relative and their age.

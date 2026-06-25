@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Character, GameEvent, Choice, StatKey } from './game/types';
+import type { Character, GameEvent, Choice, StatKey, Item } from './game/types';
 import type { CharacterCreationInput } from './game/character';
 import { createCharacter, applyEffects, clamp } from './game/character';
 import { naturalAging, rollDeath, ageRelatives } from './game/engine';
+import { rollAdditionalSiblings } from './game/family';
 import { pickEvent } from './game/events';
-import { saveGame, loadGame, clearSave } from './game/save';
+import { DRIVERS_LICENSE_EVENT } from './game/events/drivers';
+import type { ShopItem } from './game/shop';
+import { saveGame, loadGame, clearSave, getLivesLived, incrementLivesLived } from './game/save';
+
+const LICENSE_OFFER_CHANCE = 0.7;
 
 interface GameState {
   character: Character | null;
@@ -22,6 +27,7 @@ export function useGame() {
   });
   // Tracks which "once" events have already fired this life.
   const [firedOnce, setFiredOnce] = useState<Set<string>>(new Set());
+  const [livesLived, setLivesLived] = useState<number>(getLivesLived);
 
   // Load any existing save on first mount.
   useEffect(() => {
@@ -44,6 +50,7 @@ export function useGame() {
     const fresh = new Set<string>();
     setFiredOnce(fresh);
     setState({ character: createCharacter(input), pendingEvent: null, lastResult: null });
+    setLivesLived(incrementLivesLived());
   }, []);
 
   // Permanently deletes the current character and save data.
@@ -61,6 +68,7 @@ export function useGame() {
       let c: Character = { ...prev.character, age: prev.character.age + 1 };
       c = naturalAging(c);
       c = ageRelatives(c);
+      c = rollAdditionalSiblings(c);
 
       // Death check happens before events — no events after death.
       const cause = rollDeath(c);
@@ -72,6 +80,15 @@ export function useGame() {
           log: [...c.log, { age: c.age, text: `Died of ${cause} at age ${c.age}.` }],
         };
         return { character: c, pendingEvent: null, lastResult: null };
+      }
+
+      // The driver's license offer is a once-in-a-lifetime, age-16-only check:
+      // 70% of the time it's guaranteed to show that year, 30% it never appears.
+      if (c.age === 16) {
+        if (Math.random() < LICENSE_OFFER_CHANCE) {
+          return { character: c, pendingEvent: DRIVERS_LICENSE_EVENT, lastResult: null };
+        }
+        return { character: c, pendingEvent: pickEvent(c, firedOnce), lastResult: null };
       }
 
       const event = pickEvent(c, firedOnce);
@@ -91,6 +108,48 @@ export function useGame() {
         character: updated,
         pendingEvent: null,
         lastResult: choice.result ?? null,
+      };
+    });
+  }, []);
+
+  // Resolves the driver's license test: adds the item to the inventory on a
+  // pass (8/10 or better), just logs the outcome on a fail.
+  const resolveLicenseTest = useCallback((score: number, passed: boolean) => {
+    setState((prev) => {
+      if (!prev.character) return prev;
+      const c = prev.character;
+      const log = [
+        ...c.log,
+        {
+          age: c.age,
+          text: passed
+            ? `Passed the driving test with a score of ${score}/10 and got a driver's license!`
+            : `Failed the driving test with a score of ${score}/10.`,
+        },
+      ];
+      const inventory: Item[] = passed
+        ? [...c.inventory, { id: 'drivers_license', name: "Driver's License", icon: '🪪', acquiredAge: c.age }]
+        : c.inventory;
+
+      return { character: { ...c, inventory, log }, pendingEvent: null, lastResult: null };
+    });
+  }, []);
+
+  // ===== Shopping =====
+
+  const buyItem = useCallback((item: ShopItem) => {
+    setState((prev) => {
+      if (!prev.character || prev.character.money < item.price) return prev;
+      const c = prev.character;
+      const newItem: Item = { id: `${item.id}-${c.inventory.length}`, name: item.name, icon: item.icon, acquiredAge: c.age };
+      return {
+        ...prev,
+        character: {
+          ...c,
+          money: c.money - item.price,
+          inventory: [...c.inventory, newItem],
+          log: [...c.log, { age: c.age, text: `Bought ${item.name} for $${item.price.toLocaleString()}.` }],
+        },
       };
     });
   }, []);
@@ -195,11 +254,14 @@ export function useGame() {
     character: state.character,
     pendingEvent: state.pendingEvent,
     lastResult: state.lastResult,
+    livesLived,
     startNewLife,
     deleteCharacter,
     ageUp,
     chooseOption,
     interactWithRelative,
+    resolveLicenseTest,
+    buyItem,
     setStat,
     setMoney,
     setJob,

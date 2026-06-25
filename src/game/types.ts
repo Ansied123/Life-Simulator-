@@ -20,8 +20,21 @@ export interface Character {
   job: string | null;
   stats: Stats;
   relatives: Relative[];
+  inventory: Item[];
+  address: string;
+  birthYear: number;
+  birthMonth: number; // 1-12
+  birthDay: number;
   // A short log of life events, newest last.
   log: LogEntry[];
+}
+
+export interface Item {
+  id: string;
+  name: string;
+  icon: string;
+  description?: string;
+  acquiredAge: number;
 }
 
 export interface LogEntry {
@@ -42,6 +55,8 @@ export interface Relative {
   alive: boolean;
   causeOfDeath?: string;
   relationship: number; // 0-100
+  // Only meaningful for mother/father; whether they're married to the other parent.
+  married?: boolean;
   // Whether each yearly interaction has already been used this year.
   talkedThisYear: boolean;
   spentTimeThisYear: boolean;

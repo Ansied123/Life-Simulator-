@@ -1,10 +1,22 @@
 import type { Character } from '../game/types';
 
-export function CharacterHeader({ character }: { character: Character }) {
+export function CharacterHeader({
+  character,
+  onViewDetails,
+}: {
+  character: Character;
+  onViewDetails: () => void;
+}) {
   return (
     <div className="char-header">
+      <div className="char-year">Year {character.birthYear + character.age}</div>
       <div className="char-id">
-        <span className="char-name">{character.name}</span>
+        <span className="char-name-row">
+          <span className="char-name">{character.name}</span>
+          <button className="link-btn char-details-btn" onClick={onViewDetails}>
+            View Details
+          </button>
+        </span>
         <span className="char-meta">
           {character.gender === 'male' ? '♂' : '♀'} · Age {character.age}
         </span>

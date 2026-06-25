@@ -1,6 +1,8 @@
 import type { Character, Stats, Effects, LogEntry } from './types';
 import { randomGender, randomFirstName, randomLastName } from './names';
 import { generateFamily, describeFamily } from './family';
+import { randomBirthYear, randomBirthDate } from './calendar';
+import { generateAddress } from './address';
 
 export { randomGender, randomFirstName, randomLastName };
 
@@ -40,6 +42,9 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
   const familyNote = describeFamily(relatives);
   const birthText = `${fullName} was born a ${gender} baby.${familyNote ? ` ${familyNote}` : ''}`;
 
+  const birthYear = randomBirthYear();
+  const { month: birthMonth, day: birthDay } = randomBirthDate(birthYear);
+
   return {
     name: fullName,
     lastName: last,
@@ -50,6 +55,11 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
     job: null,
     stats,
     relatives,
+    inventory: [],
+    address: generateAddress(),
+    birthYear,
+    birthMonth,
+    birthDay,
     log: [{ age: 0, text: birthText }],
   };
 }

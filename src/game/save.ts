@@ -1,6 +1,6 @@
 import type { Character } from './types';
 
-const SAVE_KEY = 'lifesim_save_v2';
+const SAVE_KEY = 'lifesim_save_v3';
 
 export interface SaveData {
   character: Character;
@@ -32,4 +32,25 @@ export function clearSave(): void {
   } catch (err) {
     console.error('Failed to clear save:', err);
   }
+}
+
+const LIVES_LIVED_KEY = 'lifesim_lives_lived';
+
+// Total number of lives ever started, across all characters and saves.
+export function getLivesLived(): number {
+  try {
+    return parseInt(localStorage.getItem(LIVES_LIVED_KEY) ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function incrementLivesLived(): number {
+  const next = getLivesLived() + 1;
+  try {
+    localStorage.setItem(LIVES_LIVED_KEY, String(next));
+  } catch {
+    // localStorage unavailable; the counter just won't persist.
+  }
+  return next;
 }
