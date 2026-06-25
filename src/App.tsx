@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import type { FormEvent } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { useGame } from './store';
 import { StatBar } from './components/StatBar';
 import { EventCard } from './components/EventCard';
@@ -239,6 +240,7 @@ export default function App() {
           )}
         </div>
         {adminUI}
+        <Analytics />
       </>
     );
   }
@@ -342,6 +344,7 @@ export default function App() {
           </div>
         </div>
         {adminUI}
+        <Analytics />
       </>
     );
   }
@@ -468,6 +471,7 @@ export default function App() {
         </div>
       </div>
       {adminUI}
+      <Analytics />
     </>
   );
 }
