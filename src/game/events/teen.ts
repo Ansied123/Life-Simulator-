@@ -65,4 +65,34 @@ export const teenEvents: GameEvent[] = [
       { text: 'Enjoy your free time', effects: { happiness: 3 } },
     ],
   },
+
+  // ===== Kindergarten milestone memories, paid off years later. =====
+  {
+    id: 'overcome_stage_fright',
+    once: true,
+    condition: (c) => c.age >= 13 && c.age <= 17 && c.inventory.some((i) => i.id === 'memory_stage_fright'),
+    text: () => 'Your class is putting on a talent show, and you remember freezing up the last time you were on a stage.',
+    choices: [
+      {
+        text: 'Go for it anyway',
+        result: 'You did it — the stage fright from kindergarten finally faded.',
+        effects: { happiness: 6, looks: 2, log: 'Got back on stage and finally got past your old stage fright.' },
+      },
+      { text: 'Sit this one out', effects: { happiness: -2, log: 'Decided to sit out the talent show again.' } },
+    ],
+  },
+  {
+    id: 'stand_up_resilience',
+    once: true,
+    condition: (c) => c.age >= 13 && c.age <= 17 && c.inventory.some((i) => i.id === 'memory_playground_bully'),
+    text: () => 'You see someone else getting picked on, and it brings back memories of being bullied yourself in kindergarten.',
+    choices: [
+      {
+        text: 'Step in and help',
+        result: 'Standing up for them helped you make peace with what happened to you, too.',
+        effects: { happiness: 5, looks: 1, log: 'Stood up for someone being bullied, drawing on your own past.' },
+      },
+      { text: 'Look away', effects: { happiness: -1, log: 'Looked away — the memory still too raw.' } },
+    ],
+  },
 ];

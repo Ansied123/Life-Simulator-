@@ -16,18 +16,21 @@ import { StudyPanel } from './components/StudyPanel';
 import { SchoolActionsPanel } from './components/SchoolActionsPanel';
 import { ParentInvolvementPanel } from './components/ParentInvolvementPanel';
 import { ProgressReportView } from './components/ProgressReportView';
+import { ChangelogPanel } from './components/ChangelogPanel';
 import { Analytics } from '@vercel/analytics/react';
 import type { StatKey, Item } from './game/types';
 import { randomGender, randomFirstName, randomLastName } from './game/character';
 import { DRIVERS_LICENSE_EVENT_ID, TAKE_TEST_CHOICE_TEXT } from './game/events/drivers';
+import { KINDERGARTEN_REPEAT_EVENT_ID } from './game/events/kindergartenRepeat';
 import { MONTHLY_MODE_MIN_AGE, currentMonthAbbrev } from './game/calendar';
 import { initButtonSounds, setSoundMuted, setMusicVolume, playMainMenuMusic, playInGameMusic } from './sound';
+import { CHANGELOG } from './game/changelog';
 import './App.css';
 
 const STAT_ORDER: StatKey[] = ['health', 'happiness', 'smarts', 'looks'];
 const SUFFIX_OPTIONS = ['', 'Jr.', 'Sr.', 'I', 'II', 'III', 'IV', 'V'];
 const TEXT_SIZES = ['small', 'medium', 'large'] as const;
-const APP_VERSION = 'v1.4';
+const APP_VERSION = `v${CHANGELOG[0].version}`;
 const SHOP_MIN_AGE = 12;
 
 type Theme = 'light' | 'dark';
@@ -84,9 +87,9 @@ export default function App() {
   const {
     character,
     pendingEvent,
-    lastResult,
     lastClassmateConflict,
     lastFamilyConflict,
+    schoolEnrollmentAlert,
     livesLived,
     startNewLife,
     deleteCharacter,
@@ -98,7 +101,11 @@ export default function App() {
     interactWithSubject,
     performSchoolAction,
     quitSchool,
+    askParentForHelp,
+    restAtHome,
+    confirmSchoolEnrollmentAlert,
     resolveLicenseTest,
+    resolveKindergartenRepeatChoice,
     buyItem,
     setStat,
     setMoney,
@@ -108,6 +115,7 @@ export default function App() {
   const [screen, setScreen] = useState<'menu' | 'create' | 'game'>('menu');
   const [view, setView] = useState<'log' | 'family' | 'school' | 'classmates'>('log');
   const [showSettings, setShowSettings] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSignInNotice, setShowSignInNotice] = useState(false);
@@ -260,6 +268,26 @@ export default function App() {
 
       <div className="version-tag">{APP_VERSION}</div>
 
+      {schoolEnrollmentAlert && (
+        <div className="settings-overlay">
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span>Kindergarten Enrollment</span>
+            </div>
+            <p className="death-note">
+              {character?.name} has been enrolled in kindergarten at {schoolEnrollmentAlert.schoolName}!
+            </p>
+            <button
+              className="primary-btn"
+              style={{ width: '100%', marginTop: 12 }}
+              onClick={confirmSchoolEnrollmentAlert}
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+
       {showSettings && (
         <div className="settings-overlay" onClick={() => setShowSettings(false)}>
           <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
@@ -321,6 +349,20 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showChangelog && (
+        <div className="settings-overlay" onClick={() => setShowChangelog(false)}>
+          <div className="settings-panel changelog-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <span>Changelog</span>
+              <button className="close-btn" onClick={() => setShowChangelog(false)} aria-label="Close changelog">
+                ×
+              </button>
+            </div>
+            <ChangelogPanel />
           </div>
         </div>
       )}
@@ -463,6 +505,9 @@ export default function App() {
             </button>
             <button className="secondary-btn" onClick={() => setShowSettings(true)}>
               Settings
+            </button>
+            <button className="secondary-btn" onClick={() => setShowChangelog(true)}>
+              Changelog
             </button>
           </div>
 
@@ -785,7 +830,11 @@ export default function App() {
               </div>
               <SchoolActionsPanel
                 school={character.school}
-                onPerform={performSchoolAction}
+                onPerform={(actionId) => {
+                  performSchoolAction(actionId);
+                  setShowSchoolActions(false);
+                  setView('log');
+                }}
                 onDropOut={() => {
                   quitSchool();
                   setShowSchoolActions(false);
@@ -804,7 +853,7 @@ export default function App() {
                   ×
                 </button>
               </div>
-              <ParentInvolvementPanel character={character} />
+              <ParentInvolvementPanel character={character} onAskForHelp={askParentForHelp} />
             </div>
           </div>
         )}
@@ -852,6 +901,10 @@ export default function App() {
                       setShowLicenseQuiz(true);
                       return;
                     }
+                    if (pendingEvent.id === KINDERGARTEN_REPEAT_EVENT_ID) {
+                      resolveKindergartenRepeatChoice(choice.text);
+                      return;
+                    }
                     chooseOption(choice);
                   }}
                 />
@@ -892,12 +945,18 @@ export default function App() {
                         {logRows.map(({ entry, marker }, i) => (
                           <div key={i} className="log-entry">
                             <span className="log-age">{marker}</span>
-                            <span className={`log-text ${entry.kind ? `log-text-${entry.kind}` : ''}`}>
-                              {entry.text}
-                            </span>
+                            <div className="log-text-group">
+                              <span className={`log-text ${entry.kind ? `log-text-${entry.kind}` : ''}`}>
+                                {entry.text}
+                              </span>
+                              {entry.detail && (
+                                <span className={`log-text ${entry.kind ? `log-text-${entry.kind}` : ''}`}>
+                                  {entry.detail}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ))}
-                        {lastResult && <div className="log-result">{lastResult}</div>}
                         <div ref={logEndRef} />
                       </div>
                     </div>
@@ -916,6 +975,7 @@ export default function App() {
                       onOpenStudy={() => setShowStudyPanel(true)}
                       onOpenSchoolActions={() => setShowSchoolActions(true)}
                       onOpenParentInvolvement={() => setShowParentInvolvement(true)}
+                      onRest={restAtHome}
                     />
                   ) : (
                     <ClassmatesPanel
@@ -947,7 +1007,7 @@ export default function App() {
             <button
               className="age-btn"
               onClick={ageUp}
-              disabled={!!pendingEvent}
+              disabled={!!pendingEvent || !!schoolEnrollmentAlert}
               title={pendingEvent ? 'Resolve the event first' : 'Advance one year'}
             >
               Age Up <span className="age-plus">+1</span>
@@ -956,7 +1016,7 @@ export default function App() {
             <button
               className="age-btn"
               onClick={nextMonth}
-              disabled={!!pendingEvent}
+              disabled={!!pendingEvent || !!schoolEnrollmentAlert}
               title={pendingEvent ? 'Resolve the event first' : 'Advance one month'}
             >
               Next Month <span className="age-plus">→</span>

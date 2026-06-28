@@ -7,7 +7,11 @@ import {
   socialLabel,
   teacherRelationshipLabel,
   overallLearningProgress,
+  MAX_FOCUS_POINTS,
+  SCHOOL_GOALS,
 } from '../game/school';
+import { TEMPERAMENT_INFO, SCHOOL_CULTURE_INFO } from '../game/schoolTraits';
+import { computeReputationTags, REPUTATION_TAG_INFO } from '../game/reputationTags';
 
 export function SchoolPanel({
   character,
@@ -15,14 +19,16 @@ export function SchoolPanel({
   onOpenStudy,
   onOpenSchoolActions,
   onOpenParentInvolvement,
+  onRest,
 }: {
   character: Character;
   onOpenReportCard: () => void;
   onOpenStudy: () => void;
   onOpenSchoolActions: () => void;
   onOpenParentInvolvement: () => void;
+  onRest: () => void;
 }) {
-  const [detailsFolded, setDetailsFolded] = useState(false);
+  const [detailsFolded, setDetailsFolded] = useState(true);
   const school = character.school;
   if (!school) {
     return <p className="death-note">Not enrolled in school yet.</p>;
@@ -32,6 +38,7 @@ export function SchoolPanel({
   // necessarily the character's current age-derived year.
   const yearNow = calendarYearAt(character.birthYear, character.birthMonth, school.enrolledAge, school.enrolledMonth);
   const learning = overallLearningProgress(school);
+  const reputationTags = computeReputationTags(school);
 
   return (
     <div className="school-panel">
@@ -81,6 +88,11 @@ export function SchoolPanel({
               <span className="school-info-label">School Type</span>
               <span className="school-info-value">{school.type}</span>
             </div>
+            <div className="school-info-row">
+              <span className="school-info-label">School Culture</span>
+              <span className="school-info-value">{school.culture}</span>
+            </div>
+            <p className="school-culture-note">{SCHOOL_CULTURE_INFO[school.culture].tagline}</p>
           </>
         )}
 
@@ -100,8 +112,47 @@ export function SchoolPanel({
         </div>
       </div>
 
+      <div className="focus-card">
+        <div className="focus-header">
+          <span className="focus-label">Monthly Focus</span>
+          <span className="focus-value">
+            {school.focusPoints} / {MAX_FOCUS_POINTS}
+          </span>
+        </div>
+        <p className="focus-note">You only have so much energy as a kindergartener. Choose what matters this month.</p>
+        <button className="secondary-btn rest-btn" disabled={school.focusPoints <= 0} onClick={onRest}>
+          Rest at Home (+2 Health, +1 Happiness · 1 Focus)
+        </button>
+      </div>
+
+      <div className="goals-card">
+        <div className="goals-header">Goals This Year</div>
+        <ul className="goals-list">
+          {school.goalIds.map((id) => {
+            const goal = SCHOOL_GOALS.find((g) => g.id === id);
+            if (!goal) return null;
+            const complete = goal.isComplete(school);
+            return (
+              <li key={id} className={`goal-item ${complete ? 'goal-complete' : ''}`}>
+                <span className="goal-check">{complete ? '✓' : '○'}</span>
+                <span className="goal-text">
+                  <strong>{goal.label}</strong> — {goal.description}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
       <div className="student-info-card">
         <div className="student-info-header">Student Info</div>
+
+        {character.temperament && (
+          <p className="temperament-note">
+            <strong>{TEMPERAMENT_INFO[character.temperament].label}</strong> —{' '}
+            {TEMPERAMENT_INFO[character.temperament].description}
+          </p>
+        )}
 
         <div className="student-stat-row">
           <span className="stat-label">Attendance</span>
@@ -142,6 +193,16 @@ export function SchoolPanel({
         <div className="stat-track">
           <div className="stat-fill" style={{ width: `${school.teacherRelationship}%`, background: 'var(--stat-looks)' }} />
         </div>
+
+        {reputationTags.length > 0 && (
+          <div className="reputation-tags">
+            {reputationTags.map((tag) => (
+              <span key={tag} className="reputation-tag-chip" title={REPUTATION_TAG_INFO[tag].description}>
+                {REPUTATION_TAG_INFO[tag].label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

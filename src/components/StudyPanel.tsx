@@ -9,8 +9,11 @@ export function StudyPanel({
   school: School;
   onStudy: (subject: SchoolSubject) => void;
 }) {
+  const outOfFocus = school.focusPoints <= 0;
+
   return (
     <div className="study-list">
+      {outOfFocus && <p className="death-note">No focus left this month — come back next month.</p>}
       {SCHOOL_SUBJECTS.map((subject) => {
         const studied = school.subjectsStudiedThisMonth[subject];
         return (
@@ -19,7 +22,7 @@ export function StudyPanel({
               <span className="study-name">{subject}</span>
               <span className="study-meta">{learningLabel(school.subjects[subject])}</span>
             </div>
-            <button className="secondary-btn study-btn" disabled={studied} onClick={() => onStudy(subject)}>
+            <button className="secondary-btn study-btn" disabled={studied || outOfFocus} onClick={() => onStudy(subject)}>
               {studied ? 'Studied ✓' : 'Study'}
             </button>
           </div>

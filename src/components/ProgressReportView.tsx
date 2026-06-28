@@ -40,6 +40,18 @@ export function ProgressReportView({ report }: { report: ProgressReportData }) {
           <p className="certificate-comment">No awards earned this year.</p>
         )}
       </div>
+      <div className="certificate-row certificate-row-stacked">
+        <span className="certificate-label">Goals Met</span>
+        {report.goalsCompleted.length > 0 ? (
+          <ul className="certificate-awards-list">
+            {report.goalsCompleted.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="certificate-comment">No goals met this year.</p>
+        )}
+      </div>
       <div className="certificate-row">
         <span className="certificate-label">Promotion Status</span>
         <span className="certificate-value">{report.promotionStatus}</span>

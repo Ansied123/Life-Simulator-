@@ -32,9 +32,16 @@ export interface Character {
   // Once kindergarten has been finished (or dropped out of) for any reason,
   // it's not offered again.
   completedKindergarten: boolean;
+  // Generated once at kindergarten enrollment; colors how school-related
+  // actions and events play out. Null before enrollment.
+  temperament: Temperament | null;
   // A short log of life events, newest last.
   log: LogEntry[];
 }
+
+// A hidden-ish personality trait generated at kindergarten enrollment; see
+// game/schoolTraits.ts for what each one actually changes mechanically.
+export type Temperament = 'Curious' | 'Shy' | 'Energetic' | 'Sensitive' | 'Bold';
 
 export interface Item {
   id: string;
@@ -57,6 +64,7 @@ export interface ProgressReportData {
   attendance: number; // 0-100
   teacherComment: string;
   awards: string[]; // names of awards earned during the cycle
+  goalsCompleted: string[]; // labels of this year's goals that were met
   promotionStatus: string;
 }
 
@@ -67,6 +75,9 @@ export interface LogEntry {
   text: string;
   // 'major' = bolded (deaths, etc.); 'self' = lighter (the player's own routine actions).
   kind?: 'major' | 'self';
+  // An optional second line shown under the same entry (e.g. the flavor text
+  // that follows a life-event choice), styled the same as the main line.
+  detail?: string;
 }
 
 // ===== Family =====
@@ -102,6 +113,15 @@ export type SchoolLevel = 'Kindergarten';
 export type Grade = 'K';
 export type SchoolType = 'Public' | 'Private' | 'Charter' | 'Montessori' | 'Religious';
 export type TeacherPersonality = 'Kind' | 'Strict' | 'Funny' | 'Patient' | 'Serious' | 'Energetic';
+// Generated once per school; see game/schoolTraits.ts for what each one
+// changes mechanically.
+export type SchoolCulture =
+  | 'Academic-Focused'
+  | 'Play-Based'
+  | 'Strict Discipline'
+  | 'Creative Environment'
+  | 'Underfunded'
+  | 'Elite Reputation';
 
 export const SCHOOL_SUBJECTS = [
   'Reading Readiness',
@@ -124,12 +144,17 @@ export interface Teacher {
 export interface Classmate {
   id: string;
   name: string;
+  // Fixed personality assigned at generation; see game/classmateArchetypes.ts
+  // for what it actually changes mechanically. Distinct from ClassmateStatus
+  // below, which is just a label derived live from relationship.
+  archetype: ClassmateArchetype;
   relationship: number; // 0-100; status label is derived from this
   playedThisMonth: boolean;
   sharedToyThisMonth: boolean;
   talkedThisMonth: boolean;
 }
 export type ClassmateStatus = 'Bully' | 'Rival' | 'Classmate' | 'Friend' | 'Best Friend';
+export type ClassmateArchetype = 'Bossy' | 'Quiet' | 'Wild' | 'Sweet' | 'Popular' | 'Tough';
 
 export type ParentTeacherMeetingStatus =
   | 'Not Yet Scheduled'
@@ -143,6 +168,7 @@ export interface School {
   name: string;
   district: string;
   type: SchoolType;
+  culture: SchoolCulture;
   classroom: string;
   teacher: Teacher;
   // The character's age/month at the moment of enrollment, used to compute
@@ -168,7 +194,38 @@ export interface School {
   // 0-100; how the parents feel about how their kid is doing in school.
   parentSatisfaction: number;
   parentTeacherMeetingStatus: ParentTeacherMeetingStatus;
+  // Remaining monthly "energy" for school-related actions (study, school
+  // actions, classmate interactions, asking a parent for help, resting).
+  // Resets to MAX_FOCUS_POINTS every month — forces the player to choose
+  // rather than doing everything available in a single month.
+  focusPoints: number;
+  // How many of the teacher's 2 personality hints have been revealed to the
+  // player so far this enrollment (0-2); see game/school.ts TEACHER_HINTS.
+  teacherHintsRevealed: number;
+  // 2-3 goals generated at enrollment for this school year; see
+  // game/school.ts SCHOOL_GOALS for what each one actually checks.
+  goalIds: SchoolGoalId[];
+  // Consecutive months a withdrawal-risk condition has been true; resets to
+  // 0 the moment things improve. See maybeWithdrawFromKindergarten.
+  withdrawalRiskStreak: number;
+  // Set the moment the talent show's "Get stage fright" choice is picked;
+  // feeds the Kindergarten Stage Fright milestone memory.
+  hadStageFright: boolean;
+  // Counts classmate-interaction falling-outs with a Bully-status or Tough
+  // classmate; feeds the Playground Bully Memory milestone memory.
+  bullyConflictCount: number;
 }
+
+// A 2-3 month-long target generated at enrollment; see game/school.ts
+// SCHOOL_GOALS for the actual completion check behind each one.
+export type SchoolGoalId =
+  | 'make_friend'
+  | 'reading_target'
+  | 'behavior_target'
+  | 'teacher_relationship_target'
+  | 'earn_award'
+  | 'social_target'
+  | 'attendance_target';
 
 // ===== Events =====
 
@@ -182,12 +239,16 @@ export interface Effects {
   job?: string | null;
   // Free-text line appended to the life log when this outcome happens.
   log?: string;
+  // Optional second line attached to the same log entry; see LogEntry.detail.
+  detail?: string;
   // Styling hint for the log entry above; see LogEntry.kind.
   logKind?: LogEntry['kind'];
   // Relationship deltas applied to specific relatives, by id.
   relativeEffects?: { relativeId: string; relationship: number }[];
-  // Relationship deltas applied to specific classmates, by id.
-  classmateEffects?: { classmateId: string; relationship: number }[];
+  // Relationship deltas applied to specific classmates, by id. `minRelationship`
+  // guarantees a floor (e.g. a "you're best friends now" event), applied
+  // after the additive delta above.
+  classmateEffects?: { classmateId: string; relationship: number; minRelationship?: number }[];
   // Deltas applied to the character's school record, if they're enrolled.
   schoolEffects?: {
     attendance?: number;
@@ -195,13 +256,15 @@ export interface Effects {
     socialProgress?: number;
     teacherRelationship?: number;
     subjects?: Partial<Record<SchoolSubject, number>>;
+    parentSatisfaction?: number;
+    parentHelpLevel?: number;
   };
 }
 
 export interface Choice {
   text: string;       // Button label shown to the player
   effects: Effects;   // What happens if chosen
-  // Optional flavor shown after choosing, before effects are summarized.
+  // Optional flavor text shown as a second line on the same log entry.
   result?: string;
 }
 

@@ -4,6 +4,7 @@ import { generateFamily, describeFamily } from './family';
 import { randomBirthYear, randomBirthDate } from './calendar';
 import { generateAddress } from './address';
 import { applySchoolEffects } from './school';
+import { adjustHappinessDelta } from './schoolTraits';
 
 export { randomGender, randomFirstName, randomLastName };
 
@@ -65,6 +66,7 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
     birthDay,
     school: null,
     completedKindergarten: false,
+    temperament: null,
     log: [{ age: 0, month: 0, text: birthText }],
   };
 }
@@ -72,15 +74,18 @@ export function createCharacter(input: CharacterCreationInput = {}): Character {
 // Applies a set of effects to a character, returning a NEW character
 // (we keep state immutable so React re-renders cleanly).
 export function applyEffects(c: Character, effects: Effects): Character {
+  const happinessDelta = c.school
+    ? adjustHappinessDelta(effects.happiness ?? 0, c.temperament, c.school.culture, c.stats.health)
+    : effects.happiness ?? 0;
   const stats: Stats = {
     health: clamp(c.stats.health + (effects.health ?? 0)),
-    happiness: clamp(c.stats.happiness + (effects.happiness ?? 0)),
+    happiness: clamp(c.stats.happiness + happinessDelta),
     smarts: clamp(c.stats.smarts + (effects.smarts ?? 0)),
     looks: clamp(c.stats.looks + (effects.looks ?? 0)),
   };
 
   const log: LogEntry[] = effects.log
-    ? [...c.log, { age: c.age, month: c.month, text: effects.log, kind: effects.logKind }]
+    ? [...c.log, { age: c.age, month: c.month, text: effects.log, kind: effects.logKind, detail: effects.detail }]
     : c.log;
 
   const relatives = effects.relativeEffects

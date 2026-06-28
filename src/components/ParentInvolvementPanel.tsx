@@ -1,7 +1,13 @@
 import type { Character } from '../game/types';
 import { parentHelpLevelLabel, parentSatisfactionLabel } from '../game/school';
 
-export function ParentInvolvementPanel({ character }: { character: Character }) {
+export function ParentInvolvementPanel({
+  character,
+  onAskForHelp,
+}: {
+  character: Character;
+  onAskForHelp: () => void;
+}) {
   const school = character.school;
   if (!school) {
     return <p className="death-note">Not enrolled in school yet.</p>;
@@ -12,6 +18,12 @@ export function ParentInvolvementPanel({ character }: { character: Character }) 
   return (
     <div className="parent-involvement-panel">
       <p className="death-note">Since {character.name.split(' ')[0]} is so young, parents matter a lot.</p>
+
+      {parents.length > 0 && (
+        <button className="secondary-btn ask-help-btn" disabled={school.focusPoints <= 0} onClick={onAskForHelp}>
+          Ask Parent for Help (1 Focus)
+        </button>
+      )}
 
       <div className="student-stat-row">
         <span className="stat-label">Parent Help Level</span>

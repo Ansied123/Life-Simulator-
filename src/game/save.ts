@@ -1,6 +1,6 @@
 import type { Character } from './types';
 
-const SAVE_KEY = 'lifesim_save_v12';
+const SAVE_KEY = 'lifesim_save_v18';
 
 export interface SaveData {
   character: Character;
